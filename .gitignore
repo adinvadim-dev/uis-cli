@@ -1,0 +1,10 @@
+# go
+bin/
+dist/
+build/
+*.exe
+*.test
+*.out
+
+# local config (if you choose repo-local config during dev)
+config.json
