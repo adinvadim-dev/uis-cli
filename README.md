@@ -33,6 +33,13 @@ Default output is human-readable (tables / key-value). Use `--json` to force JSO
 ./uis --json campaigns list --limit 10
 ```
 
+Preview without network (validates flags + builds JSON-RPC request):
+
+```bash
+./uis --dry-run ct-summary-report get --date-from "2026-01-01 00:00:00" --date-till "2026-01-02 00:00:00"
+./uis --json --dry-run campaigns list --limit 10
+```
+
 ## Low-Level Raw Call (escape hatch)
 
 ```bash

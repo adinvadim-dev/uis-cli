@@ -80,6 +80,13 @@ uis contacts list --help
 uis --json available-virtual-numbers list
 ```
 
+Проверка параметров без сетевого запроса:
+
+```bash
+uis --dry-run ct-summary-report get --date-from "2026-01-01 00:00:00" --date-till "2026-01-02 00:00:00"
+uis --json --dry-run campaigns list --limit 10
+```
+
 ### Низкоуровневый вызов (escape hatch)
 
 ```bash
