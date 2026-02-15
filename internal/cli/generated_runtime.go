@@ -118,7 +118,11 @@ func newGeneratedMethodCmd(g *globalFlags, r GenResource, m GenMethod) *cobra.Co
 				}
 				if p.Flag != "" && cmd.Flags().Changed(p.Flag) {
 					s, _ := cmd.Flags().GetString(p.Flag)
-					params[p.Name] = s
+					v, err := parseHumanFlagValue(p, s)
+					if err != nil {
+						return err
+					}
+					params[p.Name] = v
 				}
 			}
 
