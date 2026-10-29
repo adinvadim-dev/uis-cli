@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand/v2"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -47,9 +49,16 @@ func (e *RPCError) String() string {
 	return e.Message
 }
 
+var ErrOutcomeUnknown = errors.New("outcome_unknown: request may have committed; do not resend")
+
+func IsRead(method string) bool {
+	return strings.HasPrefix(method, "get.") || strings.HasPrefix(method, "getobj.")
+}
+
 func (c *Client) Call(ctx context.Context, method string, params map[string]any) (*Response, int, []byte, error) {
-	if c.Retries < 0 {
-		c.Retries = 0
+	retries := c.Retries
+	if retries < 0 || !IsRead(method) {
+		retries = 0
 	}
 
 	reqBody := Request{
@@ -65,8 +74,8 @@ func (c *Client) Call(ctx context.Context, method string, params map[string]any)
 	}
 
 	var lastErr error
-	for attempt := 0; attempt <= c.Retries; attempt++ {
-		httpClient := &http.Client{Timeout: c.Timeout}
+	for attempt := 0; attempt <= retries; attempt++ {
+		httpClient := &http.Client{Timeout: c.Timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL, bytes.NewReader(b))
 		if err != nil {
 			return nil, 0, nil, err
@@ -75,20 +84,32 @@ func (c *Client) Call(ctx context.Context, method string, params map[string]any)
 
 		resp, err := httpClient.Do(req)
 		if err != nil {
-			lastErr = err
-			if attempt == c.Retries {
+			lastErr = errors.New("network request failed")
+			if !IsRead(method) {
+				return nil, 0, nil, ErrOutcomeUnknown
+			}
+			if attempt == retries {
 				break
 			}
 			sleepBackoff(attempt)
 			continue
 		}
 
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
 		_ = resp.Body.Close()
+		if readErr != nil {
+			if !IsRead(method) {
+				return nil, resp.StatusCode, nil, ErrOutcomeUnknown
+			}
+			return nil, resp.StatusCode, nil, errors.New("incomplete response")
+		}
+		if !IsRead(method) && resp.StatusCode >= 500 {
+			return nil, resp.StatusCode, nil, ErrOutcomeUnknown
+		}
 
 		if resp.StatusCode == 429 || resp.StatusCode == 502 || resp.StatusCode == 503 || resp.StatusCode == 504 {
-			lastErr = fmt.Errorf("http %d: %s", resp.StatusCode, bytes.TrimSpace(body))
-			if attempt == c.Retries {
+			lastErr = fmt.Errorf("http %d", resp.StatusCode)
+			if attempt == retries {
 				return nil, resp.StatusCode, body, lastErr
 			}
 			sleepBackoff(attempt)
@@ -96,12 +117,23 @@ func (c *Client) Call(ctx context.Context, method string, params map[string]any)
 		}
 
 		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return nil, resp.StatusCode, body, fmt.Errorf("http %d: %s", resp.StatusCode, bytes.TrimSpace(body))
+			return nil, resp.StatusCode, body, fmt.Errorf("http %d", resp.StatusCode)
 		}
 
 		var out Response
-		if err := json.Unmarshal(body, &out); err != nil {
-			return nil, resp.StatusCode, body, fmt.Errorf("invalid json response: %w", err)
+		decoder := json.NewDecoder(bytes.NewReader(body))
+		decoder.UseNumber()
+		if err := decoder.Decode(&out); err != nil {
+			if !IsRead(method) {
+				return nil, resp.StatusCode, nil, ErrOutcomeUnknown
+			}
+			return nil, resp.StatusCode, nil, errors.New("invalid JSON response")
+		}
+		if out.JSONRPC != "2.0" || !matchingID(out.ID, reqBody.ID.(int)) || (len(out.Result) == 0 && out.Error == nil) {
+			if !IsRead(method) {
+				return nil, resp.StatusCode, nil, ErrOutcomeUnknown
+			}
+			return nil, resp.StatusCode, nil, errors.New("invalid RPC envelope")
 		}
 		return &out, resp.StatusCode, body, nil
 	}
@@ -117,4 +149,13 @@ func sleepBackoff(attempt int) {
 	}
 	jitter := time.Duration(rand.IntN(250)) * time.Millisecond
 	time.Sleep(d + jitter)
+}
+
+func matchingID(v interface{}, want int) bool {
+	n, ok := v.(json.Number)
+	if !ok {
+		return false
+	}
+	f, e := n.Float64()
+	return e == nil && f == float64(want)
 }

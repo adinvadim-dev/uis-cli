@@ -234,7 +234,14 @@ func TestDryRunJSONHasTypedCommonParams(t *testing.T) {
 			}
 
 			var ob outBody
-			if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &ob); err != nil {
+			var envelope struct {
+				Data   json.RawMessage `json:"data"`
+				Schema string          `json:"schemaVersion"`
+			}
+			if err := json.Unmarshal(bytes.TrimSpace(buf.Bytes()), &envelope); err != nil || envelope.Schema != "uis.cli/v1" {
+				t.Fatalf("invalid versioned envelope: %s", buf.String())
+			}
+			if err := json.Unmarshal(envelope.Data, &ob); err != nil {
 				t.Fatalf("%s: unmarshal dry-run json: %v\nout=%s", m.Method, err, buf.String())
 			}
 			if ob.Method != m.Method {

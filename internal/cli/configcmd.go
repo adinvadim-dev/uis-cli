@@ -39,6 +39,7 @@ func newConfigCmd(g *globalFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			cfg.AccessToken = "<redacted>"
 			return writeJSON(g, cfg)
 		},
 	}
@@ -52,7 +53,14 @@ func newConfigCmd(g *globalFlags) *cobra.Command {
 		Use:   "set",
 		Short: "Persist config values (host/api-version/timeout/retries). Use `uis auth login` for token.",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfgPath, cfg, err := loadEffectiveConfig(g)
+			cfgPath, _, err := loadEffectiveConfig(g)
+			if err != nil {
+				return err
+			}
+			if strings.HasSuffix(cfgPath, ".toml") {
+				return exitf(2, "Use account commands for TOML profiles")
+			}
+			cfg, err := config.Load(cfgPath)
 			if err != nil {
 				return err
 			}
@@ -70,6 +78,9 @@ func newConfigCmd(g *globalFlags) *cobra.Command {
 				cfg.Retries = retries
 			}
 
+			if g.DryRun {
+				return emit(g, map[string]interface{}{"action": "config set", "network": false})
+			}
 			// Escape hatch for automation: allow token set via stdin only.
 			if setToken {
 				if !tokenStdin {
@@ -82,6 +93,12 @@ func newConfigCmd(g *globalFlags) *cobra.Command {
 				cfg.AccessToken = strings.TrimSpace(string(b))
 			}
 
+			if strings.HasSuffix(cfgPath, ".toml") {
+				return exitf(2, "Use account commands for TOML profiles; legacy config set requires a JSON config path")
+			}
+			if g.DryRun {
+				return emit(g, map[string]interface{}{"action": "config set", "network": false})
+			}
 			if err := config.Save(cfgPath, cfg); err != nil {
 				return exitf(1, "Failed writing config %s: %v", cfgPath, err)
 			}
