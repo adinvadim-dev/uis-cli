@@ -6,6 +6,7 @@ require (
 	github.com/PuerkitoBio/goquery v1.10.3
 	github.com/mattn/go-isatty v0.0.20
 	github.com/spf13/cobra v1.8.1
+	golang.org/x/net v0.39.0
 	golang.org/x/term v0.31.0
 )
 
@@ -15,6 +16,5 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.32 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	golang.org/x/net v0.39.0 // indirect
 	golang.org/x/sys v0.32.0 // indirect
 )

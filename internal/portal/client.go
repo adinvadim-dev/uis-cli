@@ -47,8 +47,9 @@ func LoadSession(dir string) (Session, error) {
 	return s, e
 }
 
-// Promote is atomic. The verifier must obtain identity from a read-only provider
-// endpoint; a caller-supplied label is never sufficient proof.
+// Promote atomically replaces a session only after the supplied binding verifier
+// succeeds. Login uses credential binding plus an authenticated read; this is not
+// an independent provider identity assertion and cannot authorize writes.
 func Promote(dir string, s Session, expected string, verify func(Session) (string, error)) error {
 	principal, e := verify(s)
 	if e != nil {

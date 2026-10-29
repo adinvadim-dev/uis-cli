@@ -14,7 +14,7 @@ Use `uis --json` for one versioned success/error envelope. `--account NAME` sele
 - Support: `sync`, `status`, `doctor`; local `ticket list|show|search`; `--live` for direct reads; `topic list`, `contact list`; `ticket create|reply|close|reopen`.
 - Generated resources and low-level `call METHOD --params-json JSON` remain available.
 
-Private login and production support mutations currently return `capability_unavailable`: principal/CSRF verification is not proven. Do not bypass this boundary or assume an app bearer token works for support. No live mutation is authorized merely by invoking this skill.
+Private login/refresh: require `expected_login` and credential_process fields `portal.login`, `portal.password`; lazily request `captcha.2captcha_api_key` for SmartCaptcha. Use `auth login --surface private --no-input` before `support sync`, `--live` ticket reads or private `calls show`. Login binds normalized credentials plus a successful authenticated read; it does not independently identify the provider principal. Production support mutations still return `capability_unavailable`: write principal/CSRF verification is not proven. Headed human captcha is follow-up; noninteractive challenges require 2Captcha. Do not bypass this boundary or assume an app bearer token works for support. No live mutation is authorized merely by invoking this skill.
 
 Local archive reads must work without credentials/network. `support sync` is the writer. SQLite archives are sensitive; attachment metadata does not preserve bytes.
 

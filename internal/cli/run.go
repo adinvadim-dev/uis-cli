@@ -123,7 +123,7 @@ func newRootCmd() *cobra.Command {
 	capability := &cobra.Command{Use: "capability"}
 	for _, action := range []string{"list", "probe"} {
 		capability.AddCommand(&cobra.Command{Use: action, RunE: func(cmd *cobra.Command, args []string) error {
-			return emit(g, map[string]interface{}{"dataapi": "available_with_credentials", "support_archive": "local-sqlite", "private_reads": "requires_promoted_session", "private_login": "capability_unavailable: principal endpoint unverified", "private_mutations": "capability_unavailable: principal/CSRF probe required", "rapid_saved_filters": "provider_entitlement_required"})
+			return emit(g, map[string]interface{}{"dataapi": "available_with_credentials", "support_archive": "local-sqlite", "private_reads": "requires_promoted_session", "private_login": "credential_binding_and_authenticated_read", "private_mutations": "capability_unavailable: principal/CSRF probe required", "rapid_saved_filters": "provider_entitlement_required"})
 		}})
 	}
 	root.AddCommand(capability)

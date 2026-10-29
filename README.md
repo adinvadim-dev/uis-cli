@@ -2,7 +2,7 @@
 
 Go CLI for UIS calls, filtering, private tech support, and the generated Data API surface. The frozen contracts are in [docs/CLI_SPEC.md](docs/CLI_SPEC.md), [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md) and [docs/archive-contract.md](docs/archive-contract.md).
 
-**Private production enablement is incomplete.** The source-observed support adapters are tested with scripted HTTP servers. Private login promotion and live support mutations fail closed (`capability_unavailable`, exit 7) until a read-only principal and CSRF probe is established. No live account mutations were used for development. See [implementation status](docs/IMPLEMENTATION.md) for exact limits; this is not a claim of production-ready private support.
+**Private login and reads are implemented, tested with scripted HTTP servers.** Run `uis auth login --surface private --no-input` (or `refresh`) with an account `expected_login` and external `credential_process` providing portal credentials and `captcha.2captcha_api_key` when challenged. Login obtains separate app/Go tokens and promotes only after credential binding and a successful authenticated support read. This unlocks `support sync`, live ticket reads and private `calls show`. Support mutations remain fail-closed (exit 7): independent principal and CSRF verification for writes are unresolved. No live login, paid captcha or account mutation was used for development. See [implementation status](docs/IMPLEMENTATION.md).
 
 ## Build and verify
 
@@ -28,7 +28,7 @@ uis auth login --surface dataapi
 uis auth status
 ```
 
-`auth login --surface dataapi` checks credential availability, not provider acceptance. `auth login|refresh --surface private` currently exits 7 without altering an existing session. Legacy JSON Data API config remains readable; explicit account selection prevents reuse of a legacy stored token from another profile. `config set` only writes legacy JSON config, never TOML profiles. Prefer migrating stored tokens into the external helper.
+`auth login --surface dataapi` checks credential availability, not provider acceptance. `auth login|refresh --surface private` stages a fresh login and preserves the previous session on mismatch or any failure. Login labels are trimmed and matched case-insensitively; a configured customer-ID binding fails closed until a customer probe is observed. Legacy JSON Data API config remains readable; explicit account selection prevents reuse of a legacy stored token from another profile. `config set` only writes legacy JSON config, never TOML profiles. Prefer migrating stored tokens into the external helper.
 
 ## Calls and filters
 

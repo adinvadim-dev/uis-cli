@@ -73,7 +73,7 @@ func privateClient(g *globalFlags) (*portal.Client, error) {
 	if e != nil {
 		return nil, exitf(3, "Private session unavailable; run auth login")
 	}
-	if account.ExpectedLogin == "" || s.Login != account.ExpectedLogin || (account.ExpectedCustomerID != "" && s.CustomerID != account.ExpectedCustomerID) {
+	if portal.NormalizeLogin(account.ExpectedLogin) == "" || portal.NormalizeLogin(s.Login) != portal.NormalizeLogin(account.ExpectedLogin) || (account.ExpectedCustomerID != "" && s.CustomerID != account.ExpectedCustomerID) {
 		return nil, exitf(3, "Private session principal does not match account binding")
 	}
 	to, e := timeout(g)
