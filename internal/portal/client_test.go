@@ -102,6 +102,22 @@ func TestMutationRequiresPrincipalAndDoesNotReplay(t *testing.T) {
 	}
 }
 
+func TestCreateValidatesAttachmentsBeforeTicketPost(t *testing.T) {
+	posts := 0
+	c := fake(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" {
+			posts++
+		}
+		http.Error(w, "should not reach provider", 500)
+	})
+	missing := filepath.Join(t.TempDir(), "missing.bin")
+	_, e := c.Create(context.Background(), Object{"context": "hello"}, []string{missing})
+	var pe *Error
+	if !errors.As(e, &pe) || pe.Code != 2 || pe.Stage != "attachment_unreadable" || posts != 0 {
+		t.Fatalf("pre-dispatch validation failed: %v posts=%d", e, posts)
+	}
+}
+
 func TestProbeAuthenticatedReadBeforeCreate(t *testing.T) {
 	probes, tickets := 0, 0
 	c := fake(t, func(w http.ResponseWriter, r *http.Request) {

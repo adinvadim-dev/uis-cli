@@ -235,7 +235,28 @@ func (c *Client) Comments(ctx context.Context, t Object, offset, limit int) ([]O
 	}
 	return Rows(v)
 }
+// validateAttachments checks every path is readable and ≤10 MiB before any
+// provider write. Create must call this before the ticket POST so a local
+// attachment failure cannot leave an orphan ticket.
+func validateAttachments(files []string) error {
+	for _, path := range files {
+		f, e := os.Open(path)
+		if e != nil {
+			return &Error{Code: 2, Stage: "attachment_unreadable"}
+		}
+		st, e := f.Stat()
+		f.Close()
+		if e != nil || st.IsDir() || st.Size() > 10<<20 {
+			return &Error{Code: 2, Stage: "attachment_invalid"}
+		}
+	}
+	return nil
+}
+
 func multipartBody(fields Object, files []string) (*bytes.Buffer, string, error) {
+	if e := validateAttachments(files); e != nil {
+		return nil, "", e
+	}
 	var b bytes.Buffer
 	w := multipart.NewWriter(&b)
 	raw, e := json.Marshal(fields)
@@ -248,12 +269,12 @@ func multipartBody(fields Object, files []string) (*bytes.Buffer, string, error)
 	for _, path := range files {
 		f, e := os.Open(path)
 		if e != nil {
-			return nil, "", errors.New("cannot open attachment")
+			return nil, "", &Error{Code: 2, Stage: "attachment_unreadable"}
 		}
 		st, e := f.Stat()
 		if e != nil || st.Size() > 10<<20 {
 			f.Close()
-			return nil, "", errors.New("attachment exceeds 10 MiB or cannot stat")
+			return nil, "", &Error{Code: 2, Stage: "attachment_invalid"}
 		}
 		p, e := w.CreateFormFile("files", filepath.Base(path))
 		if e == nil {
@@ -305,6 +326,9 @@ func (c *Client) Create(ctx context.Context, fields Object, files []string) (Obj
 	if e := c.preflight(ctx); e != nil {
 		return nil, e
 	}
+	if e := validateAttachments(files); e != nil {
+		return nil, e
+	}
 	t, e := c.Post(ctx, "tech-support", fields, nil)
 	if e != nil {
 		return nil, e
@@ -321,6 +345,9 @@ func (c *Client) Create(ctx context.Context, fields Object, files []string) (Obj
 }
 func (c *Client) Reply(ctx context.Context, id, message string, files []string) (Object, error) {
 	if e := c.preflight(ctx); e != nil {
+		return nil, e
+	}
+	if e := validateAttachments(files); e != nil {
 		return nil, e
 	}
 	t, e := c.Ticket(ctx, id)
