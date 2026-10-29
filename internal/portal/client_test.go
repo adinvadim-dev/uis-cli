@@ -101,6 +101,46 @@ func TestMutationRequiresPrincipalAndDoesNotReplay(t *testing.T) {
 		t.Fatalf("permission refusal replayed: %v calls=%d", e, calls)
 	}
 }
+
+func TestProbeAuthenticatedReadBeforeCreate(t *testing.T) {
+	probes, tickets := 0, 0
+	c := fake(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/infopin/tech-support-web-type":
+			probes++
+			cookie, e := r.Cookie("access_token")
+			if e != nil || cookie.Value != "go" {
+				t.Fatalf("auth cookie %#v %v", cookie, e)
+			}
+			_ = json.NewEncoder(w).Encode([]Object{{"id": 1}})
+		case r.Method == "POST" && r.URL.Path == "/infopin/tech-support":
+			tickets++
+			_ = json.NewEncoder(w).Encode([]Object{{"id": 9, "is_ticket": true}})
+		case r.Method == "POST" && r.URL.Path == "/infopin/tech-support-comment":
+			_ = json.NewEncoder(w).Encode([]Object{{"id": 10}})
+		default:
+			http.NotFound(w, r)
+		}
+	})
+	c.Session = Session{GoToken: "go", Login: "user@example.com"}
+	c.Verify = func(ctx context.Context, session Session) error {
+		probe := New(session, time.Second)
+		probe.BaseURL = c.BaseURL
+		probe.HTTP = c.HTTP
+		return probe.ProbeAuthenticatedRead(ctx)
+	}
+	if _, e := c.Create(context.Background(), Object{"context": "hello"}, nil); e != nil {
+		t.Fatal(e)
+	}
+	if probes != 1 || tickets != 1 {
+		t.Fatalf("probes=%d tickets=%d", probes, tickets)
+	}
+	empty := New(Session{}, time.Millisecond)
+	empty.BaseURL = c.BaseURL
+	if e := empty.ProbeAuthenticatedRead(context.Background()); e == nil {
+		t.Fatal("empty session must fail probe")
+	}
+}
 func TestStatusReconcilesStoredNameAfterLostAck(t *testing.T) {
 	puts := 0
 	gets := 0

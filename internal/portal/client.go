@@ -267,6 +267,19 @@ func multipartBody(fields Object, files []string) (*bytes.Buffer, string, error)
 	e = w.Close()
 	return &b, w.FormDataContentType(), e
 }
+// ProbeAuthenticatedRead proves the Go session can still perform an
+// authenticated support metadata read. Write preflight uses this (or an
+// injected Verify) before dispatch. It is credential-binding + live read
+// evidence, not a dedicated /me or CSRF token contract.
+func (c *Client) ProbeAuthenticatedRead(ctx context.Context) error {
+	v, err := c.Read(ctx, "tech-support-web-type", nil)
+	if err != nil {
+		return err
+	}
+	_, err = Rows(v)
+	return err
+}
+
 func (c *Client) preflight(ctx context.Context) error {
 	if c.Verify == nil {
 		return &Error{Code: 7, Stage: "principal_probe_unavailable"}

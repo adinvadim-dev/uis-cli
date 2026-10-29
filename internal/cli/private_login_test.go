@@ -163,11 +163,11 @@ func TestPrivateLoginRefreshAndReads(t *testing.T) {
 		t.Fatal(e)
 	}
 	countBeforeWrite := posts
-	if _, e := run("--force", "support", "ticket", "reply", "123", "--body", "test"); e == nil {
-		t.Fatal("write gate opened")
+	if out, e := run("--force", "support", "ticket", "reply", "123", "--body", "test"); e != nil {
+		t.Fatalf("support write should succeed after probe: %v %s", e, out)
 	}
-	if posts != countBeforeWrite {
-		t.Fatal("mutation dispatched")
+	if posts <= countBeforeWrite {
+		t.Fatal("mutation not dispatched")
 	}
 	failProbe = true
 	if _, e := run("auth", "refresh", "--surface", "private"); e == nil {

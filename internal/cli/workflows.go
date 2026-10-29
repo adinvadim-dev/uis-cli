@@ -80,7 +80,21 @@ func privateClient(g *globalFlags) (*portal.Client, error) {
 	if e != nil {
 		return nil, e
 	}
-	return portal.New(s, to), nil
+	c := portal.New(s, to)
+	// Mutations re-probe an authenticated support read before dispatch.
+	// Reads do not call Verify. No separate CSRF token was established for
+	// infopin Bearer writes; session drift is caught by this probe.
+	c.Verify = func(ctx context.Context, session portal.Session) error {
+		if portal.NormalizeLogin(session.Login) != portal.NormalizeLogin(account.ExpectedLogin) {
+			return &portal.Error{Code: 3, Stage: "principal_mismatch"}
+		}
+		probe := portal.New(session, to)
+		probe.BaseURL = c.BaseURL
+		probe.AppURL = c.AppURL
+		probe.HTTP = c.HTTP
+		return probe.ProbeAuthenticatedRead(ctx)
+	}
+	return c, nil
 }
 func timeout(g *globalFlags) (time.Duration, error) {
 	v := g.Timeout
@@ -722,7 +736,11 @@ func newAccounts(g *globalFlags) *cobra.Command {
 				return emit(g, a)
 			case "doctor":
 				_, e := os.Stat(filepath.Join(profile.State(name), "session.json"))
-				return emit(g, map[string]interface{}{"account": name, "credential_process_configured": len(a.CredentialProcess.Command) > 0, "dataapi_env_present": os.Getenv("UIS_TOKEN") != "", "session_present": e == nil, "principal_probe": "capability_unavailable"})
+				probe := "missing_session"
+				if e == nil {
+					probe = "credential_binding_and_authenticated_read"
+				}
+				return emit(g, map[string]interface{}{"account": name, "credential_process_configured": len(a.CredentialProcess.Command) > 0, "dataapi_env_present": os.Getenv("UIS_TOKEN") != "", "session_present": e == nil, "principal_probe": probe})
 			case "add":
 				if _, ok := cfg.Accounts[name]; ok {
 					return exitf(2, "Account exists")
