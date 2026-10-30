@@ -23,3 +23,9 @@ Read [README.md](README.md) for commands and [capability limits](docs/IMPLEMENTA
 Support: `support status` checks local archive freshness; `support sync` refreshes it; `support ticket list|show|search` reads offline, and `--live` reads the provider. See [authentication](docs/AUTHENTICATION.md) for session binding and captcha requirements.
 
 Writes require explicit task authorization. Inspect `--dry-run`, send once, and verify with a fresh read. Exit 9 means outcome unknown: retain returned identity and reconcile before retrying. Preserve the account binding and preflight checks; invoking this skill grants no mutation authority. SIP/project creation follows the Medivey process skill.
+
+## Autodial
+
+Use [the coverage table](docs/research/06-autodial-coverage.md) before campaign work. Outgoing campaigns use `autodial` (private supervisor) or generated `auto-call-*` (Data API); `campaigns` means advertising. Start with `autodial statuses`, then `get ID`, `calls ID` and `subscribers ID`. Keep raw contacts/reports in protected files. Use narrow list dates through `--payload-file`; exports are JSON data, with no completeness guarantee.
+
+Private writes are dry-run-only until draft-start, principal and cleanup contracts are established. `--force` does not bypass that gate. Generated Data API writes still require explicit task authorization and confirmation. Setting `planned` / `in_process`, resuming, or listening to an audio preview may initiate real calls and charges. For a test task, retain these as plans; never put real contacts into a test campaign. On 401 refresh once; if it fails, report the exact sanitized auth blocker and continue independent local work.

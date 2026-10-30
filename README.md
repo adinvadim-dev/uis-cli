@@ -110,3 +110,22 @@ output directory is refused: use a fresh output path with
 `python3 scripts/skill_bundle.py --output /absolute/new-directory` for another build.
 Install the complete bundle together; copying only `SKILL.md` leaves its recipe and
 research references unavailable. Keep account-specific configuration outside it.
+
+## Outgoing campaigns (autodial)
+
+The [coverage inventory](docs/research/06-autodial-coverage.md) distinguishes outgoing campaigns from advertising `campaigns`. Four official methods are generated under `auto-call-campaigns`, `auto-call-campaign-phone-numbers`, and `auto-call-campaign-status`; `make spec` now also merges the provider's outgoing-campaign documentation.
+
+```sh
+uis --json autodial statuses
+uis --json autodial get 123
+uis --json autodial calls 123
+uis --json autodial subscribers 123
+uis --json autodial employees
+uis --json autodial stop-list
+uis --dry-run autodial create --payload-file ./campaign.json
+uis --json auto-call-campaigns list --limit 10
+```
+
+Private reads require a bound cabinet session with supervisor access. `list` requires a JSON file with `begin_date` / `end_date` in `YYYY-MM-DD HH:MM:SS` and optional `statuses` / `search_text`; `export` takes `campaign_ids` / `numa_statuses`, and `validate` takes `numbers` containing `numa`, `name`, `comment`, `origin`. Use `--payload-file` for these inputs (maximum 1 MiB, exactly one object). JSON export returns provider data in the normal envelope; it does not follow download URLs. Campaign get includes its contacts, schedule, attempts, caller-ID and playlist settings. No separate day-of-week or scenario binding contract is claimed.
+
+Private `create`, `update ID`, `status ID`, `exclude`, `include` and `listen` produce redacted dry-run plans; actual dispatch fails with exit 7 even with `--force`. Import and delete fail explicitly because their safe contracts remain unverified. Official Data API mutations remain callable with confirmation, but were tested only as dry-runs. Setting `planned` or `in_process` may start calls; audio preview also calls a number. No campaign write or outbound call was performed during validation. Nine supervisor reads were verified with the existing cabinet JWT on mini; no Data API key was used. See the inventory for the remaining write/cleanup blockers.

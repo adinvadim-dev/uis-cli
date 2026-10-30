@@ -73,3 +73,15 @@ By default this is a production read suite with local mutation-plan coverage. A 
 The runner pins Data API host/version to UIS production, disables retries, uses noninteractive commands and validates one `uis.cli/v1` JSON envelope plus the process exit status. It builds a temporary binary, copies only the selected profile and (unless fresh login is requested) session into a private temporary state directory, and creates a new archive there. Logout removes only that copied session. The original profile, session and archive are preserved. Offline archive checks remove the token, replace the helper with a nonexistent executable and disable the Data API route.
 
 Outputs are captured in memory; failures report fixed assertion messages, exit codes and machine error categories. Raw CLI output, credentials, phone numbers and support contents are not printed. Go cleans the temporary state on normal completion; a killed process can leave sensitive temporary files, which should be handled like the user's normal session/archive.
+
+## Autodial supervisor reads
+
+Run only the new read probe with an already refreshed, bound session:
+
+```sh
+UIS_E2E_PRODUCTION=1 UIS_E2E_AUTODIAL=1 \
+UIS_E2E_CONFIG=/absolute/config.toml UIS_E2E_ACCOUNT=team \
+go test -tags production ./e2e -run '^TestProductionAutodial$' -count=1 -v
+```
+
+It isolates config/session copies and reads statuses, employee groups and exclusions. It does not refresh/login, create a campaign, preview audio or start calls. The opt-in probe passed on mini (statuses, employees, stop-list). Additional candidate CLI reads passed for list/get, call/subscriber statistics, JSON export and empty-number validation. An initial mixed-cookie/JWT probe returned HTTP 401; JWT-only candidate reads succeeded without refreshing. Refresh itself returned `authentication_required` / `Credentials or private session required`. A campaign write lifecycle is blocked until a non-starting create and cleanup contract are proven; do not substitute real contact numbers or enable `planned`/`in_process` for testing.

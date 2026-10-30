@@ -117,7 +117,7 @@ func newRootCmd() *cobra.Command {
 	root.PersistentFlags().BoolVarP(&g.Force, "force", "f", false, "Confirm requested mutation")
 	root.PersistentFlags().Bool("no-color", false, "Disable color")
 	root.AddCommand(newAuthCmd(g))
-	root.AddCommand(newAccounts(g), newCalls(g), newSupport(g))
+	root.AddCommand(newAccounts(g), newCalls(g), newSupport(g), newAutodial(g))
 	root.AddCommand(newDiscovery(g, "filters", map[string]string{"list": "get.report_filters", "show": "get.custom_filters", "rapid": "get.report_rapid_filters"}))
 	root.AddCommand(newDiscovery(g, "reports", map[string]string{"list": "get.reports_list"}))
 	capability := &cobra.Command{Use: "capability"}

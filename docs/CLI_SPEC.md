@@ -224,3 +224,9 @@ uis --json call get.calls_report --params-json '{"date_from":"...","date_till":"
 ## Private call search extension (2026-10-30)
 
 Search and filters/reports discovery accept `--source auto|private|dataapi`. Auto selects an existing bound private session; private auth/provider/schema errors never silently fall back. Search source is `private.report_constructor`; discovery source is `private.cabinet_rpc` (RPC host with cabinet JWT, no API key). Private filter-json uses the catalog's cabinet schema. Empty search is success, possibly with unknown total. A page is bounded and has no snapshot guarantee. Dry-run never reads sessions: explicit private describes its private query; auto retains the legacy Data API-compatible plan without resolving its runtime source. See [live findings](research/05-private-call-search-live.md) and README for values, paging and identity limits.
+
+## Autodial extension (2026-10-30)
+
+`autodial list|get|statuses|calls|subscribers|employees|stop-list|export|validate` uses the private supervisor surface with cabinet JWT; no automatic fallback to advertising campaigns or Data API. `get`, `calls`, `subscribers`, `update`, `status`, `delete` require a positive campaign ID. List/export/validate inputs use `--payload-file`; plans omit payload values and never resolve sessions. List requires explicit ordered cabinet dates. Outputs use the standard envelope with `source=private.supervisor`, scrubbed data, and completeness limitations.
+
+`create|update|status|exclude|include|listen` are dry-run-only (exit 7 on dispatch); `import|delete` are capability-unavailable. `--force` cannot override these gates. This intentionally withholds unverified write principal, draft-start, import and cleanup contracts. The generated official `auto-call-*` resources retain normal confirmation and outcome-unknown semantics. See [coverage](research/06-autodial-coverage.md) for each operation and known settings.

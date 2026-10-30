@@ -33,12 +33,14 @@ type Method struct {
 }
 
 func main() {
+	var merge bool
 	var base string
 	var out string
 	var maxPages int
 	var timeout time.Duration
 	var sleep time.Duration
 
+	flag.BoolVar(&merge, "merge", false, "Merge scraped methods into existing output snapshot")
 	flag.StringVar(&base, "base", "https://www.uiscom.ru/academiya/spravochnyj-centr/dokumentatsiya-api/data_api/", "Base docs URL to crawl")
 	flag.StringVar(&out, "out", "", "Output JSON file path")
 	flag.IntVar(&maxPages, "max-pages", 5000, "Hard cap for pages to fetch (safety)")
@@ -67,6 +69,19 @@ func main() {
 	queue := []string{baseURL.String()}
 
 	methods := map[string]Method{}
+	if merge {
+		raw, err := os.ReadFile(out)
+		if err != nil {
+			fatal("read merge target: %v", err)
+		}
+		var existing []Method
+		if json.Unmarshal(raw, &existing) != nil {
+			fatal("invalid merge target")
+		}
+		for _, m := range existing {
+			methods[m.Method] = m
+		}
+	}
 
 	for len(queue) > 0 {
 		if len(seen) >= maxPages {

@@ -21,6 +21,7 @@ install-hooks:
 
 spec:
 	go run ./tools/uis-scrape --out internal/spec/data/api_spec.json
+	go run ./tools/uis-scrape --base https://comagic.github.io/data_api/auto_calls/ --merge --out internal/spec/data/api_spec.json
 
 gen:
 	go run ./tools/uis-gen --in internal/spec/data/api_spec.json --out internal/cli/generated_resources.go

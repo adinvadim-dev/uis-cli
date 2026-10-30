@@ -87,13 +87,14 @@ func Promote(dir string, s Session, expected string, verify func(Session) (strin
 type Client struct {
 	BaseURL, AppURL   string
 	ReportURL, RPCURL string
+	SupervisorURL     string
 	HTTP              *http.Client
 	Session           Session
 	Verify            func(context.Context, Session) error
 }
 
 func New(s Session, timeout time.Duration) *Client {
-	return &Client{ReportURL: "https://uis-prod-msk-report-constructor-api.uiscom.ru", RPCURL: "https://dataapi.uiscom.ru", BaseURL: "https://uis-prod-msk-comagic-api.uiscom.ru", AppURL: "https://app.uiscom.ru", Session: s, HTTP: &http.Client{Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
+	return &Client{SupervisorURL: "https://uis-prod-msk-comagic-supervisor-workplace-api.uiscom.ru/v1/common", ReportURL: "https://uis-prod-msk-report-constructor-api.uiscom.ru", RPCURL: "https://dataapi.uiscom.ru", BaseURL: "https://uis-prod-msk-comagic-api.uiscom.ru", AppURL: "https://app.uiscom.ru", Session: s, HTTP: &http.Client{Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 }
 func ID(o Object) string {
 	switch v := o["id"].(type) {
