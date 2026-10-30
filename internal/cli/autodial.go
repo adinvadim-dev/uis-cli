@@ -86,12 +86,17 @@ func newAutodial(g *globalFlags) *cobra.Command {
 			sort.Strings(fields)
 			// Plans deliberately omit values: phone lists, TTS and comments may contain
 			// private information. No credential/session I/O occurs on this path.
-			plan := portal.Object{"source": "private.supervisor", "method": r.Method, "path": r.Path, "campaign_id": id, "payload_fields": fields, "mutation": r.Write, "network": false, "live_enabled": !r.Write}
+			plan := portal.Object{"source": "private.supervisor", "method": r.Method, "path": r.Path, "campaign_id": id, "payload_fields": fields, "mutation": r.Write, "network": false, "live_enabled": !r.Write || action == "exclude" || action == "include"}
 			if g.DryRun {
 				return emit(g, plan)
 			}
 			if r.Write {
-				return exitf(7, "Autodial write contract unverified: use --dry-run; see coverage inventory")
+				if action != "exclude" && action != "include" {
+					return exitf(7, "Autodial write contract unverified: use --dry-run; see coverage inventory")
+				}
+				if e := confirm(g, plan); e != nil {
+					return e
+				}
 			}
 			c, e := privateClient(g)
 			if e != nil {

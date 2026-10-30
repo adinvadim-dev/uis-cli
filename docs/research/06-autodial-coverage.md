@@ -18,12 +18,12 @@ Private source: supervisor-workplace frontend build 2026-10-19T12:32:02.617Z, ch
 | Contact outcomes export | private | POST /auto_call/get_campaigns_numa_list | autodial export --payload-file | verified-live; JSON output, no file locator following |
 | Employee groups | private | GET /auto_call/employees_in_groups | autodial employees | verified-live |
 | Stop-list read | private | GET /auto_call/excluded_numa | autodial stop-list | verified-live |
-| Stop-list add/remove | private | POST/DELETE /auto_call/excluded_numa?numa | autodial exclude/include --payload-file | dry-run-only; write principal contract unverified |
+| Stop-list add/remove | private | POST/DELETE /auto_call/excluded_numa?numa | autodial exclude/include --payload-file | verified-live POST/DELETE 204 plus read-back, synthetic fixture removed |
 | Create campaign | private | POST /auto_call/campaign | autodial create --payload-file | dry-run-only; default start semantics and safe cleanup unverified |
 | Edit settings / phone_list / attempts / schedule | private | PUT /auto_call/campaign?campaign_id | autodial update ID --payload-file | dry-run-only; saving draft may set new_status=planned |
 | Start/resume/pause/stop | private | PATCH /auto_call/campaign?campaign_id | autodial status ID --payload-file | dry-run-only; consult statuses, never guess next_statuses |
 | Validate numbers | private | POST /auto_call/campaign/validate_numbers | autodial validate --payload-file | verified-live (empty list and invalid phone rejection); returns numbers, does not persist campaign |
-| CSV/XLSX import | private | POST /auto_call/campaign/import_numbers multipart file + old_numbers | autodial import --input-file | implemented parse-only multipart; CSV live probe; XLSX bytes passed unchanged, format not live-verified |
+| CSV/XLSX import | private | POST /auto_call/campaign/import_numbers multipart file + old_numbers | autodial import --input-file | verified-live CSV and XLSX parse-only multipart; no campaign persistence |
 | Clear contacts | private | Replace phone_list via campaign PUT | autodial update ID --payload-file | dry-run-only; no atomic append/clear endpoint observed |
 | Delete/archive campaign | private | Not observed | autodial delete ID | blocked: no deletion/archival endpoint established; cancelled is not deletion |
 | IVR/scenarios/media | Data API | get.scenarios, get.media_files | scenarios list; media-files list | existing generated surface; campaign uses playlist/employee settings, not proven scenario_id |
@@ -63,3 +63,13 @@ The three outgoing mutations have working keyless RPC routing with existing conf
 Import uses the frontend multipart fields file and old_numbers. It returns editor numbers and does not persist a campaign; the 10 MiB bound is a CLI bound, not a proven provider maximum. CSV is covered by the opt-in real-binary suite. XLSX bytes use the same server parsing route; XLSX format handling is not yet verified live. Delete/archive and a safe non-starting create/cleanup lifecycle remain unresolved.
 
 Latest keyless/import suite on mini: 22 PASS, zero SKIP. Ten supervisor read/parse commands passed (including CSV import without saving a campaign), and generated/raw RPC listing with auto/private passed with deliberately unavailable API-key credentials. Six supervisor write guards, unavailable delete and four official method plan/confirmation checks passed. Outgoing RPC mutations remain production-unverified; no campaign/number/status mutation or call was sent.
+
+## Real exclusion mutations and XLSX
+
+The next production run validated a minimal XLSX workbook through the real CLI/provider parser, including exact phone-string preservation. Stop-list POST and DELETE each returned HTTP 204 without JSON. Both were confirmed by fresh GETs; the original exclusion set was restored. The CLI now supports these acknowledgements and read-back verification. An independently opted-in real-binary lifecycle (`UIS_E2E_AUTODIAL_EXCLUSION_WRITE=1`) writes a durable exclusive journal; the final stage was cleanup_verified. Result: 24 PASS, zero SKIP. No campaign/contact/status write or outbound call occurred.
+
+Safe campaign cleanup is still unresolved: current frontend handlers expose cancellation but no delete/archive route; authenticated read-only schema discovery returned 404 for openapi.json/swagger.json. OPTIONS did not provide an Allow contract. The provider help mentions deletion generally, so this is an unresolved discovery gap, not a claim that UIS cannot delete campaigns. Creating a resource that might remain cancelled requires an explicit exception to the original delete/archive requirement before dispatch.
+
+Review found and corrected a recovery-journal race: absent reads cannot certify cleanup after an unresolved add, which may commit later. The harness retains add_unresolved unless the add was acknowledged or observed before compensation. Offline late-commit regression demonstrated failure without this fence and success with it; it runs in the ordinary Go suite without production access.
+
+A second recovery review finding was fixed: cleanup must stop before DELETE if persisting remove_dispatch fails. The offline regression fails when the stage error is ignored and passes when dispatch is fenced. Both journal failures leave explicit recovery state; successful cleanup remains separately verified live.

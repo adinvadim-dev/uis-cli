@@ -105,8 +105,13 @@ func (c *Client) Autodial(ctx context.Context, action, id string, payload Object
 	if e != nil {
 		return nil, e
 	}
-	if r.Write {
+	if r.Write && action != "exclude" && action != "include" {
 		return nil, &Error{Code: 7, Stage: "autodial_write_contract_unverified"}
+	}
+	if r.Write {
+		if e := c.preflight(ctx); e != nil {
+			return nil, e
+		}
 	}
 	if c.Session.CabinetToken == "" {
 		return nil, &Error{Code: 3, Stage: "cabinet_session_refresh_required"}
@@ -140,9 +145,41 @@ func (c *Client) Autodial(ctx context.Context, action, id string, payload Object
 	req.Header.Set("Referer", "https://go.uiscom.ru/")
 	resp, e := c.HTTP.Do(req)
 	if e != nil {
-		return nil, &Error{Code: 6, Stage: "autodial_transport"}
+		code := 6
+		if r.Write {
+			code = 9
+		}
+		return nil, &Error{Code: code, Stage: "autodial_transport"}
 	}
 	defer resp.Body.Close()
+	if r.Write && resp.StatusCode == 204 {
+		v, e := c.Autodial(ctx, "stop-list", "", nil)
+		if e != nil {
+			return nil, &Error{Code: 9, Stage: "autodial_exclusion_readback"}
+		}
+		rows, ok := v.([]interface{})
+		if !ok {
+			return nil, &Error{Code: 9, Stage: "autodial_exclusion_readback"}
+		}
+		found := false
+		for _, row := range rows {
+			o, ok := row.(map[string]interface{})
+			if !ok {
+				return nil, &Error{Code: 9, Stage: "autodial_exclusion_readback"}
+			}
+			numa, ok := o["numa"].(string)
+			if !ok {
+				return nil, &Error{Code: 9, Stage: "autodial_exclusion_readback"}
+			}
+			if numa == r.Query.Get("numa") {
+				found = true
+			}
+		}
+		if found != (action == "exclude") {
+			return nil, &Error{Code: 9, Stage: "autodial_exclusion_readback"}
+		}
+		return Object{"success": true, "verified": true}, nil
+	}
 	code := 6
 	switch {
 	case resp.StatusCode == 401 || resp.StatusCode/100 == 3:
@@ -154,8 +191,14 @@ func (c *Client) Autodial(ctx context.Context, action, id string, payload Object
 	case resp.StatusCode == 429:
 		code = 8
 	}
+	if r.Write && (resp.StatusCode >= 500 || resp.StatusCode == 408 || resp.StatusCode/100 == 2) {
+		code = 9
+	}
 	if resp.StatusCode != 200 {
 		return nil, &Error{Code: code, Stage: "autodial_http"}
+	}
+	if r.Write {
+		return nil, &Error{Code: 9, Stage: "autodial_exclusion_acknowledgement"}
 	}
 	b, e := io.ReadAll(io.LimitReader(resp.Body, (16<<20)+1))
 	if e != nil || len(b) > 16<<20 {

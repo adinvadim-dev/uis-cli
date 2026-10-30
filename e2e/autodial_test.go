@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -224,6 +225,16 @@ func TestProductionAutodial(t *testing.T) {
 			t.Fatal("CSV parser changed fixture number")
 		}
 	})
+
+	t.Run("live/import-xlsx", func(t *testing.T) {
+		file := filepath.Join(scratch, "uis-cli-test-import.xlsx")
+		autodialXLSX(t, file)
+		v := object(t, privateData(t, "import", "--input-file", file))
+		rows, ok := v["numbers"].([]any)
+		if !ok || len(rows) != 1 || object(t, rows[0])["numa"] != "70000000000" {
+			t.Fatal("XLSX parser failed fixture roundtrip")
+		}
+	})
 	// Every blocked write is exercised in a fresh CLI process without usable
 	// credentials, using synthetic IDs/content and never a customer target.
 	for _, tc := range []struct {
@@ -235,8 +246,6 @@ func TestProductionAutodial(t *testing.T) {
 		{"create", false, "POST", "/auto_call/campaign", map[string]any{"name": "uis-cli e2e test — do not start", "phone_list": []any{}}},
 		{"update", true, "PUT", "/auto_call/campaign", map[string]any{"phone_list": []any{}}},
 		{"status", true, "PATCH", "/auto_call/campaign", map[string]any{"status": "in_process"}},
-		{"exclude", false, "POST", "/auto_call/excluded_numa", map[string]any{"numa": "uis-cli-invalid-number"}},
-		{"include", false, "DELETE", "/auto_call/excluded_numa", map[string]any{"numa": "uis-cli-invalid-number"}},
 		{"listen", false, "POST", "/auto_call/campaign/listen_audio_message", map[string]any{"numb": "uis-cli-invalid-number", "playlist": []any{}}},
 	} {
 		t.Run("guard/"+tc.action, func(t *testing.T) {
@@ -260,6 +269,100 @@ func TestProductionAutodial(t *testing.T) {
 			}
 		})
 	}
+
+	for _, action := range []string{"exclude", "include"} {
+		t.Run("confirmation/"+action, func(t *testing.T) {
+			offlineGuard(t)
+			args := []string{"autodial", action, "--payload-file", payloadFile(action, map[string]any{"numa": "70000000000"})}
+			plan := object(t, h.json(t, 0, append([]string{"--dry-run"}, args...)...))
+			if plan["live_enabled"] != true || plan["network"] != false {
+				t.Fatal("wrong exclusion plan")
+			}
+			r, code := h.execute(t, args...)
+			if code != 10 || r.Error.Code != "confirmation_required" {
+				t.Fatal("missing exclusion confirmation")
+			}
+		})
+	}
+
+	t.Run("live/exclusion-write", func(t *testing.T) {
+		if os.Getenv("UIS_E2E_AUTODIAL_EXCLUSION_WRITE") != "1" {
+			t.Skip("explicit exclusion-write opt-in required; no live write proof")
+		}
+		path := os.Getenv("UIS_E2E_AUTODIAL_EXCLUSION_JOURNAL")
+		if !filepath.IsAbs(path) {
+			t.Fatal("new absolute exclusion journal required")
+		}
+		const marker = "70000000000"
+		numbers := func() (map[string]bool, error) {
+			r, code := h.execute(t, "autodial", "stop-list")
+			if code != 0 {
+				return nil, fmt.Errorf("exclusion read exit=%d category=%s", code, r.Error.Code)
+			}
+			v, ok := r.Data.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("invalid read envelope")
+			}
+			rows, ok := v["data"].([]any)
+			if !ok {
+				return nil, fmt.Errorf("invalid exclusion set")
+			}
+			set := map[string]bool{}
+			for _, row := range rows {
+				o, ok := row.(map[string]any)
+				if !ok {
+					return nil, fmt.Errorf("invalid exclusion row")
+				}
+				numa, ok := o["numa"].(string)
+				if !ok {
+					return nil, fmt.Errorf("invalid exclusion identity")
+				}
+				set[numa] = true
+			}
+			return set, nil
+		}
+		before, e := numbers()
+		if e != nil {
+			t.Fatal(e)
+		}
+		if before[marker] {
+			t.Fatal("fixture already excluded; leave unchanged")
+		}
+		f, e := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+		if e != nil {
+			t.Fatal("journal exists or cannot be claimed; reconcile before rerunning")
+		}
+		defer f.Close()
+		stage := func(s string) error {
+			b, _ := json.Marshal(map[string]string{"stage": s, "account": account, "fixture": marker})
+			if _, e := f.Write(append(b, '\n')); e != nil {
+				return fmt.Errorf("cannot persist recovery stage")
+			}
+			if f.Sync() != nil {
+				return fmt.Errorf("cannot sync recovery stage")
+			}
+			return nil
+		}
+		file := payloadFile("exclude-live", map[string]any{"numa": marker})
+		write := func(action string) error {
+			r, code := h.execute(t, "--force", "autodial", action, "--payload-file", file)
+			if code != 0 {
+				return fmt.Errorf("exclusion write exit=%d category=%s", code, r.Error.Code)
+			}
+			v, ok := r.Data.(map[string]any)
+			if !ok {
+				return fmt.Errorf("invalid write envelope")
+			}
+			data, ok := v["data"].(map[string]any)
+			if !ok || data["verified"] != true {
+				return fmt.Errorf("write not verified")
+			}
+			return nil
+		}
+		if e := exclusionLifecycle(marker, before, numbers, write, stage); e != nil {
+			t.Fatal(e)
+		}
+	})
 	for _, action := range []string{"delete"} {
 		t.Run("blocked/"+action, func(t *testing.T) {
 			offlineGuard(t)

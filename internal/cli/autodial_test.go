@@ -14,7 +14,7 @@ func TestAutodialPlansAndWriteGuard(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", filepath.Join(dir, "missing-state"))
 	payload := filepath.Join(dir, "request.json")
 	os.WriteFile(payload, []byte(`{"name":"PRIVATE_CONTENT","numa":"70000000000","status":"in_process"}`), 0600)
-	for _, action := range []string{"create", "update", "status", "exclude", "include", "listen"} {
+	for _, action := range []string{"create", "update", "status", "listen"} {
 		args := []string{"autodial", action}
 		if action == "update" || action == "status" {
 			args = append(args, "123")
