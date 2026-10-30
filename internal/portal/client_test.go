@@ -194,29 +194,51 @@ func TestTicketsAndCommentsOmitBrokenQueryParams(t *testing.T) {
 }
 
 func TestStatusReconcilesStoredNameAfterLostAck(t *testing.T) {
-	puts := 0
-	gets := 0
-	c := fake(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "PUT" {
-			puts++
-			var o Object
-			json.NewDecoder(r.Body).Decode(&o)
-			if o["status"] != "closed" || o["is_ticket"] != true {
-				t.Fatal("wrong close contract")
+	for _, tc := range []struct {
+		name, requested, before, after string
+		ticket, success                bool
+	}{
+		{"close", "closed", "created", "close_customer", true, true},
+		{"reopen-created", "created", "close_customer", "created", true, true},
+		// Live infopin stores waiting_operator for reopened first-line requests.
+		{"reopen-waiting-operator", "created", "close_customer", "waiting_operator", false, true},
+		{"reopen-unchanged-closed", "created", "close_customer", "close_customer", false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			puts, gets := 0, 0
+			c := fake(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == "PUT" {
+					puts++
+					var o Object
+					json.NewDecoder(r.Body).Decode(&o)
+					if o["status"] != tc.requested || o["is_ticket"] != tc.ticket {
+						t.Error("wrong status wire contract")
+					}
+					http.Error(w, "uncertain", 503)
+					return
+				}
+				gets++
+				status := tc.before
+				if gets > 1 {
+					status = tc.after
+				}
+				fmt.Fprintf(w, `[{"id":123,"is_ticket":%t,"status":%q}]`, tc.ticket, status)
+			})
+			v, e := c.Status(context.Background(), "123", tc.requested)
+			if puts != 1 || gets != 2 {
+				t.Fatalf("status must send once and reconcile with a read: puts=%d gets=%d", puts, gets)
 			}
-			http.Error(w, "uncertain", 503)
-			return
-		}
-		gets++
-		status := "created"
-		if gets > 1 {
-			status = "close_customer"
-		}
-		fmt.Fprintf(w, `[{"id":123,"is_ticket":true,"status":%q}]`, status)
-	})
-	v, e := c.Status(context.Background(), "123", "closed")
-	if e != nil || v["status"] != "close_customer" || puts != 1 || gets != 2 {
-		t.Fatalf("%v %v puts=%d gets=%d", v, e, puts, gets)
+			if tc.success {
+				if e != nil || v["status"] != tc.after {
+					t.Fatalf("stored status was not reconciled: %v %v", v, e)
+				}
+			} else {
+				var pe *Error
+				if !errors.As(e, &pe) || pe.Code != 9 || pe.TicketID != "123" {
+					t.Fatalf("unchanged status must remain outcome_unknown: %v", e)
+				}
+			}
+		})
 	}
 }
 func TestSessionPromotionPreservesPreviousOnMismatch(t *testing.T) {

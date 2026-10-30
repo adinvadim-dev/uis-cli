@@ -428,7 +428,7 @@ func (c *Client) Status(ctx context.Context, id, status string) (Object, error) 
 	after, e := c.Ticket(ctx, id)
 	if e == nil {
 		got := fmt.Sprint(after["status"])
-		if (status == "closed" && (got == "close_customer" || got == "close_operator" || got == "canceled")) || (status == "created" && got == "created") {
+		if (status == "closed" && (got == "close_customer" || got == "close_operator" || got == "canceled")) || (status == "created" && (got == "created" || got == "waiting_operator")) {
 			return after, nil
 		}
 	}
