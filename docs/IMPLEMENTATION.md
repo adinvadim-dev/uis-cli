@@ -24,7 +24,7 @@ The authorized fallback archive uses local SQLite / FTS4 (CGO), staying on Go 1.
 - **Archive:** crawlkit migration, exact crawlctl manifest interoperability, failed-page inventory, incremental resume, attachment bytes, pruning/deletion reconciliation and per-thread completion markers remain follow-up work. The compatible schema label does not certify crawlctl integration.
 - **Secondary commands:** private balance and recording download are not implemented. Saved-filter writes, sales, recognition, exports, chats, CDR archives and originate remain out of scope.
 
-The PR remains draft while live provider compatibility (especially paid captcha login and a real support write) is unverified on this account. No live mutations may be used to prove remaining gaps without separate authorization.
+Private login and call-search compatibility have now been verified live (see the extension below). Support-write compatibility remains unverified; no live business mutations may be used to prove remaining gaps without separate authorization.
 
 ## Review corrections
 

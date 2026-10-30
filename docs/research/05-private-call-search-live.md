@@ -32,7 +32,7 @@ Equality predicates are `{field,operator:"=",value}`; combine with `{condition:"
 | Paging | limit=2, offset=0/2 | Two pages accepted, total=28154 for the fixed two-day window |
 | Sorting | call_start_date_time desc; communication_id asc | Both exercised through CLI on nonempty pages; ID asc pages checked for order and disjoint identities |
 
-The report catalog contains 51 filter fields, including timing/durations, finish reason, employees, scenario, tags, internal calls, phone/operator/region and comments. Catalog values are account-dependent; do not bake them into fixtures or documentation. The catalog provides employee/scenario display names, not their numeric IDs. Returned employee cells have value, entity_id, entity_type; their presence does not establish an ID-filter wire contract. Private ID flags therefore fail explicitly; use names, or explicit Data API mode for its documented ID predicates.
+The report catalog contains 50 filter fields, including timing/durations, finish reason, employees, scenario, tags, internal calls, phone/operator/region and comments. Catalog values are account-dependent; do not bake them into fixtures or documentation. The catalog provides employee/scenario display names, not their numeric IDs. Returned employee cells have value, entity_id, entity_type; their presence does not establish an ID-filter wire contract. Private ID flags therefore fail explicitly; use names, or explicit Data API mode for its documented ID predicates.
 
 ## Limits and unknowns
 
