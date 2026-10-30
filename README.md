@@ -15,6 +15,8 @@ go vet ./...
 bin/uis --help
 ```
 
+For opt-in checks against real UIS accounts, see [Production E2E](docs/PRODUCTION_E2E.md) and `make test-production`. The suite is separate from ordinary tests and performs production reads; mutation coverage uses dry-run.
+
 ## Credentials
 
 Profiles are non-secret TOML at `$XDG_CONFIG_HOME/uis/config.toml` (fallback `~/.config/uis/config.toml`), or `UIS_CONFIG`. No secrets through flags. Use an external helper producing exactly one `uis.credential-process/v1` JSON document; see the authentication contract. For automation `UIS_TOKEN` overrides the Data API field without invoking the helper.
