@@ -93,3 +93,20 @@ Call annotations resolve the session’s `communication_id` through a read befor
 Exit codes: 0 success; 1 execution; 2 usage; 3 auth; 4 permission; 5 missing; 6 provider; 7 unavailable/drift; 8 quota; 9 unknown outcome; 10 confirmation. Earlier Data API codes 10–12 are replaced.
 
 The existing generated commands, `uis call <method>`, `methods`, `spec`, `config`, and Cobra shell completion remain available. Use `uis <resource> <action> --help` or `uis call --help`. Generated metadata is maintained with `make spec gen`; do not hand-edit it.
+
+## Agent skill bundle
+
+For call/transfer investigations, start with [the bounded recipe](docs/TRANSFER_INVESTIGATION.md).
+The Python 3 standard-library helper `scripts/call_brief.py` projects search rows,
+nested private timelines and one requested filter field without loading raw provider
+bodies or account-wide catalogs into the model context. It preserves source, IDs,
+unknown counts and explicit omission/truncation markers. It performs no network calls.
+
+`make check` runs Go tests/vet, Python contract tests and recursive skill dependency
+validation. `make install-hooks` installs the same local pre-commit gate; no GitHub
+Actions checks are required. `make skill-bundle` creates a new `dist/uis-cli-skill`
+directory containing `SKILL.md`, the helper and its linked documentation. An existing
+output directory is refused: use a fresh output path with
+`python3 scripts/skill_bundle.py --output /absolute/new-directory` for another build.
+Install the complete bundle together; copying only `SKILL.md` leaves its recipe and
+research references unavailable. Keep account-specific configuration outside it.

@@ -1,0 +1,1 @@
+- Added a bounded call-transfer investigation recipe, compact offline JSON projections and a complete validated agent skill bundle to reduce repeated discovery and oversized model context while preserving termination evidence and uncertainty.
