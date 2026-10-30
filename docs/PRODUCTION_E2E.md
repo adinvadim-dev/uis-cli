@@ -73,3 +73,35 @@ By default this is a production read suite with local mutation-plan coverage. A 
 The runner pins Data API host/version to UIS production, disables retries, uses noninteractive commands and validates one `uis.cli/v1` JSON envelope plus the process exit status. It builds a temporary binary, copies only the selected profile and (unless fresh login is requested) session into a private temporary state directory, and creates a new archive there. Logout removes only that copied session. The original profile, session and archive are preserved. Offline archive checks remove the token, replace the helper with a nonexistent executable and disable the Data API route.
 
 Outputs are captured in memory; failures report fixed assertion messages, exit codes and machine error categories. Raw CLI output, credentials, phone numbers and support contents are not printed. Go cleans the temporary state on normal completion; a killed process can leave sensitive temporary files, which should be handled like the user's normal session/archive.
+
+## Autodial supervisor reads
+
+Run only the new read probe with an already refreshed, bound session:
+
+```sh
+UIS_E2E_PRODUCTION=1 UIS_E2E_AUTODIAL=1 \
+UIS_E2E_CONFIG=/absolute/config.toml UIS_E2E_ACCOUNT=team \
+go test -tags production ./e2e -run '^TestProductionAutodial$' -count=1 -v
+```
+
+The suite isolates config/session copies. It dispatches live supervisor/catalog/RPC reads, validates campaign identity and result shapes, checks CSV/XLSX parse-only imports and keyless generated/raw × auto/private listing, and checks offline plans/confirmation for writes with unusable credentials. Audio preview and physical delete must refuse dispatch. Guard checks are not mutation proof.
+
+UIS_E2E_AUTODIAL_FROM / UIS_E2E_AUTODIAL_TILL set cabinet date windows. UIS_E2E_AUTODIAL_CAMPAIGN_ID selects a read-only fixture; otherwise the first returned campaign is used only for reads. Empty lists explicitly skip dependent reads. Never substitute an existing business campaign for write testing. Outputs suppress provider bodies, IDs, customer content and secrets.
+
+## Independent write opt-ins
+
+Set UIS_E2E_AUTODIAL_EXCLUSION_WRITE=1 and UIS_E2E_AUTODIAL_EXCLUSION_JOURNAL=/absolute/new-file.json for synthetic stop-list add/remove. The exclusive 0600 journal is fsynced before dispatch. The original set must be restored. Offline recovery regressions prevent absent reads after an unresolved add from certifying cleanup and prevent removal after journal failure.
+
+Fresh campaign lifecycle additionally requires all of:
+
+- UIS_E2E_AUTODIAL_CAMPAIGN_WRITE=1 and UIS_E2E_AUTODIAL_ALLOW_CANCELLED_RESIDUE=1, explicitly accepting one cancelled resource with deleted history.
+- UIS_E2E_AUTODIAL_CALLER_ID and UIS_E2E_AUTODIAL_EMPLOYEE_ID from private directories.
+- UIS_E2E_AUTODIAL_CAMPAIGN_JOURNAL=/absolute/new-file.jsonl in a protected directory. Existing files are refused; never erase a journal to rerun.
+
+The lifecycle creates with a unique test marker, 2099 account-local start, disabled audio and synthetic contacts. It checks get/list, contact/employee update, rejection of a read-only date edit, RPC add/remove, stats/export, clear and cancellation. It never sends in_process, start/resume or audio preview. An unresolved write retains recovery state; no automatic retry or absent-read cleanup certificate. A known ID from an uncertain create permits cleanup only after ownership is read back. A create without identity requires marker reconciliation before anything else.
+
+Cancellation is logical cleanup. Physical DELETE returned 405; deleted contact rows remain. The operator must explicitly accept this residue before each fresh lifecycle. The present task permits one and has already consumed it, so do not run another create. Instead set UIS_E2E_AUTODIAL_OWNED_JOURNAL to the existing private lifecycle journal: the suite verifies its name/ID, cancelled state, deleted rows, and repeated clear/cancel no-ops. This read-back does not pretend to be fresh CLI creation proof.
+
+## Evidence
+
+Direct corrected production creation and contact/employee PUT succeeded; CLI RPC contact addition/removal and cancellation succeeded with verified read-back. The sole fixture is cancelled with zero active contacts. Earlier empty-draft 500 was an invalid DTO, not a proven service-wide outage. The [inventory](research/06-autodial-coverage.md) records full coverage and remaining live-proof limits. Start/resume, enabled prediction/audio and draft-only edits are tested locally rather than activated in production.

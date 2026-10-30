@@ -117,7 +117,7 @@ func newRootCmd() *cobra.Command {
 	root.PersistentFlags().BoolVarP(&g.Force, "force", "f", false, "Confirm requested mutation")
 	root.PersistentFlags().Bool("no-color", false, "Disable color")
 	root.AddCommand(newAuthCmd(g))
-	root.AddCommand(newAccounts(g), newCalls(g), newSupport(g))
+	root.AddCommand(newAccounts(g), newCalls(g), newSupport(g), newAutodial(g))
 	root.AddCommand(newDiscovery(g, "filters", map[string]string{"list": "get.report_filters", "show": "get.custom_filters", "rapid": "get.report_rapid_filters"}))
 	root.AddCommand(newDiscovery(g, "reports", map[string]string{"list": "get.reports_list"}))
 	capability := &cobra.Command{Use: "capability"}
@@ -238,7 +238,7 @@ func parseParams(paramKVs []string, paramsJSON string, paramsFile string) (map[s
 
 	if paramsJSON != "" {
 		var v any
-		if err := json.Unmarshal([]byte(paramsJSON), &v); err != nil {
+		if err := decodeParamsJSON([]byte(paramsJSON), &v); err != nil {
 			return nil, exitf(2, "Invalid --params-json: %v", err)
 		}
 		obj, ok := v.(map[string]any)
@@ -262,7 +262,7 @@ func parseParams(paramKVs []string, paramsJSON string, paramsFile string) (map[s
 			return nil, exitf(2, "Failed reading --params-file %q: %v", paramsFile, err)
 		}
 		var v any
-		if err := json.Unmarshal(b, &v); err != nil {
+		if err := decodeParamsJSON(b, &v); err != nil {
 			return nil, exitf(2, "Invalid JSON in --params-file %q: %v", paramsFile, err)
 		}
 		obj, ok := v.(map[string]any)
@@ -284,7 +284,7 @@ func parseParams(paramKVs []string, paramsJSON string, paramsFile string) (map[s
 				return nil, exitf(2, "Invalid --param %q: empty key", raw)
 			}
 			var v any
-			if err := json.Unmarshal([]byte(parts[1]), &v); err != nil {
+			if err := decodeParamsJSON([]byte(parts[1]), &v); err != nil {
 				return nil, exitf(2, "Invalid JSON in --param %s: %v", k, err)
 			}
 			out[k] = v

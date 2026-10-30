@@ -1,0 +1,3 @@
+Enable validated future campaign creation, verified contact/employee updates, logical clearing and status aliases through the private UIS session. Add caller/media/scenario/schedule/timezone directories and fix RPC mutation acknowledgement handling with effect verification. Reject planned settings the server silently ignores; preserve campaign identities on uncertain outcomes.
+
+Добавлены создание будущих кампаний, проверяемое изменение контактов/сотрудников, логическая очистка, команды статусов и справочники через сессию UIS. Исправлена обработка подтверждений RPC с проверкой фактического результата. Изменения недоступных настроек отклоняются; при неопределённом исходе сохраняется ID кампании.

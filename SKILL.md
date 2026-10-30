@@ -23,3 +23,13 @@ Read [README.md](README.md) for commands and [capability limits](docs/IMPLEMENTA
 Support: `support status` checks local archive freshness; `support sync` refreshes it; `support ticket list|show|search` reads offline, and `--live` reads the provider. See [authentication](docs/AUTHENTICATION.md) for session binding and captcha requirements.
 
 Writes require explicit task authorization. Inspect `--dry-run`, send once, and verify with a fresh read. Exit 9 means outcome unknown: retain returned identity and reconcile before retrying. Preserve the account binding and preflight checks; invoking this skill grants no mutation authority. SIP/project creation follows the Medivey process skill.
+
+## Autodial
+
+Use [the coverage table](docs/research/06-autodial-coverage.md) before campaign work. Outgoing campaigns use `autodial` (private supervisor) or generated `auto-call-*` (Data API); `campaigns` means advertising. Start with `autodial statuses`, then `get ID`, `calls ID` and `subscribers ID`. Keep raw contacts/reports in protected files. Use narrow list dates through `--payload-file`; exports are JSON data, with no completeness guarantee.
+
+Create requires future account-local begin_date, nonempty employee_ids/phone_list, and an available caller ID. Resolve references with autodial employees/caller-rules/caller-numbers/caller-groups/caller-lists/timezone; resolve playlist files with media. Creation schedules a planned campaign; it does not save an empty draft. Planned/running/paused updates accept only contacts/employees. Use clear for logical contact removal, cancel for terminal cleanup; successful contact history and the campaign itself may remain. Physical delete/archive is unavailable.
+
+Authorized mutations use confirmation/preflight, one dispatch and read-back verification. On exit 9 preserve the payload, name marker and campaign_id, reconcile current state, and stop automatic retries. Read success is not write proof. Official auto-call-* methods accept --source private with cabinet JWT and no API key; auto prefers a bound session. Use dataapi for the separate key route. Import parses CSV/XLSX without saving; keep returned rows private. Stop-list exclude/include also verify their effects.
+
+Start/resume/in_process, planned transitions and audio preview may initiate calls/charges. Keep activation as dry-run in a no-call test task. Audio preview dispatch is gated. Use synthetic contacts and a far-future start for an explicitly authorized lifecycle; cancellation residue requires explicit permission. Record dispatch/recovery stages durably, never create another campaign after an unresolved attempt. On 401 refresh once; if it fails, report the sanitized blocker and continue independent work.

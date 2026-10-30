@@ -110,3 +110,26 @@ output directory is refused: use a fresh output path with
 `python3 scripts/skill_bundle.py --output /absolute/new-directory` for another build.
 Install the complete bundle together; copying only `SKILL.md` leaves its recipe and
 research references unavailable. Keep account-specific configuration outside it.
+
+## Outgoing campaigns (autodial)
+
+The [coverage inventory](docs/research/06-autodial-coverage.md) distinguishes outgoing campaigns from advertising `campaigns`. Four official methods are generated under `auto-call-campaigns`, `auto-call-campaign-phone-numbers`, and `auto-call-campaign-status`; `make spec` now also merges the provider's outgoing-campaign documentation.
+
+```sh
+uis --json autodial statuses
+uis --json autodial get 123
+uis --json autodial calls 123
+uis --json autodial subscribers 123
+uis --json autodial employees
+uis --json autodial stop-list
+uis --dry-run autodial create --payload-file ./campaign.json
+uis --json auto-call-campaigns list --limit 10
+```
+
+Private reads require a bound cabinet session with supervisor access. `list` requires a JSON file with `begin_date` / `end_date` in `YYYY-MM-DD HH:MM:SS` and optional `statuses` / `search_text`; `export` takes `campaign_ids` / `numa_statuses`, and `validate` takes `numbers` containing `numa`, `name`, `comment`, `origin`. Use `--payload-file` for these inputs (maximum 1 MiB, exactly one object). JSON export returns provider data in the normal envelope; it does not follow download URLs. Campaign get includes its contacts, schedule, attempts, caller-ID and playlist settings. No separate day-of-week or scenario binding contract is claimed.
+
+`autodial create --payload-file` now creates a future **planned** campaign with required contacts, employees and caller ID; an empty draft is not supported. `update ID` edits contacts/employees after planning and rejects settings the server would ignore. `status ID` and `start|pause|resume|stop|cancel|complete|schedule ID` use allowed transitions; `clear ID` logically removes eligible contacts. Writes require confirmation (`--force --no-input` for an authorized agent), preflight, one dispatch and read-back verification. Exit 9 requires reconciliation, never a blind retry. Physical delete/archive is unavailable; audio preview remains dry-run-only because it calls a number.
+
+Use `caller-rules`, `caller-numbers`, `caller-groups`, `caller-lists`, `media`, `scenarios`, `schedules`, and `timezone` to resolve settings through the private session. Creation dates are account local time. Campaigns use employee/playlist settings, without a proven scenario_id or separate weekday-schedule binding. `import --input-file contacts.csv` parses CSV/XLSX without saving; supply returned numbers to create/update. `exclude|include --payload-file` manages the stop-list with verified cleanup. Official outgoing commands accept `--source auto|private|dataapi`; auto/private use cabinet JWT without a Data API key.
+
+Valid direct production probes created one future campaign, edited contacts/employees and cancelled it; actual CLI RPC additions/removals/cancellation and read/import/stop-list flows passed. The permitted residue is cancelled with zero active contacts. Activation/audio and other billing-sensitive behavior remain untested live. See the [coverage inventory](docs/research/06-autodial-coverage.md) for per-operation evidence and the [production test guide](docs/PRODUCTION_E2E.md) for opt-ins.

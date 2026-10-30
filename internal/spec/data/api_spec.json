@@ -1,5 +1,37 @@
 [
   {
+    "method": "create.auto_call_campaign_phone_numbers",
+    "title": "Добавление номеров в кампанию исходящего обзвона",
+    "url": "https://comagic.github.io/data_api/auto_calls/create_auto_call_campaign_phone_numbers/",
+    "description": "Добавление номеров в кампанию исходящего обзвона",
+    "params": [
+      {
+        "name": "access_token",
+        "required": true,
+        "type": "string",
+        "description": "Ключ сессии аутентификации"
+      },
+      {
+        "name": "campaign_id",
+        "required": true,
+        "type": "number",
+        "description": "Уникальный идентификатор кампании исходящего обзвона"
+      },
+      {
+        "name": "phone_numbers",
+        "required": true,
+        "type": "array",
+        "description": "Список номеров абонента (array of string)"
+      },
+      {
+        "name": "user_id",
+        "required": false,
+        "type": "number",
+        "description": "Уникальный идентификатор пользователя клиента агента от имени которого делается запрос Является обязательным для агента"
+      }
+    ]
+  },
+  {
     "method": "create.campaigns",
     "title": "Создание рекламной кампании",
     "url": "https://www.uiscom.ru/academiya/spravochnyj-centr/dokumentatsiya-api/data_api/campaign/create_campaigns/",
@@ -1431,6 +1463,38 @@
     ]
   },
   {
+    "method": "delete.auto_call_campaign_phone_numbers",
+    "title": "Удаление номеров из кампании исходящего обзвона",
+    "url": "https://comagic.github.io/data_api/auto_calls/delete_auto_call_campaign_phone_numbers/",
+    "description": "Удаление номеров из кампании исходящего обзвона Нельзя удалить номера в окончательных статусах successfully_processed, processed_outside_campaign, deleted.",
+    "params": [
+      {
+        "name": "access_token",
+        "required": true,
+        "type": "string",
+        "description": "Ключ сессии аутентификации"
+      },
+      {
+        "name": "campaign_id",
+        "required": true,
+        "type": "number",
+        "description": "Уникальный идентификатор кампании исходящего обзвона"
+      },
+      {
+        "name": "phone_numbers",
+        "required": true,
+        "type": "array",
+        "description": "Список номеров абонента (array of string)"
+      },
+      {
+        "name": "user_id",
+        "required": false,
+        "type": "number",
+        "description": "Уникальный идентификатор пользователя клиента агента от имени которого делается запрос Является обязательным для агента"
+      }
+    ]
+  },
+  {
     "method": "delete.campaigns",
     "title": "Удаление рекламной кампании",
     "url": "https://www.uiscom.ru/academiya/spravochnyj-centr/dokumentatsiya-api/data_api/campaign/delete_campaigns/",
@@ -2121,6 +2185,56 @@
         "required": true,
         "type": "string",
         "description": "Ключ сессии аутентификации"
+      }
+    ]
+  },
+  {
+    "method": "get.auto_call_campaigns",
+    "title": "Получение списка кампаний исходящего обзвона",
+    "url": "https://comagic.github.io/data_api/auto_calls/get_auto_call_campaigns/",
+    "description": "Получение списка кампаний исходящего обзвона",
+    "params": [
+      {
+        "name": "access_token",
+        "required": true,
+        "type": "string",
+        "description": "Ключ сессии аутентификации"
+      },
+      {
+        "name": "fields",
+        "required": false,
+        "type": "array",
+        "description": "См. раздел \"Представление возвращаемых данных\""
+      },
+      {
+        "name": "filter",
+        "required": false,
+        "type": "object",
+        "description": "См. раздел \"Критерии фильтрации\""
+      },
+      {
+        "name": "limit",
+        "required": false,
+        "type": "number",
+        "description": "Количество возвращаемых записей. См. раздел \"Постраничный вывод\""
+      },
+      {
+        "name": "offset",
+        "required": false,
+        "type": "number",
+        "description": "Сдвиг, определяет с какого номера записи возвращать \"limit\" записей. По умолчанию \"0\". См. раздел \"Постраничный вывод\""
+      },
+      {
+        "name": "sort",
+        "required": false,
+        "type": "array",
+        "description": "См. раздел \"Сортировка данных\""
+      },
+      {
+        "name": "user_id",
+        "required": false,
+        "type": "number",
+        "description": "Уникальный идентификатор пользователя клиента агента, от имени которого выполняется запрос Является обязательным для агента Для получения списка пользователей клиента используйте метод \"get.customer_users\""
       }
     ]
   },
@@ -5357,6 +5471,32 @@
         "required": true,
         "type": "number",
         "description": "Уникальный идентификатор посетителя на сайте"
+      }
+    ]
+  },
+  {
+    "method": "set.auto_call_campaign_status",
+    "title": "Обновление статуса кампании исходящего обзвона",
+    "url": "https://comagic.github.io/data_api/auto_calls/set_auto_call_campaign_status/",
+    "description": "Обновление статуса кампании исходящего обзвона",
+    "params": [
+      {
+        "name": "access_token",
+        "required": true,
+        "type": "string",
+        "description": "Ключ сессии аутентификации"
+      },
+      {
+        "name": "id",
+        "required": true,
+        "type": "number",
+        "description": "Уникальный идентификатор кампании исходящего обзвона"
+      },
+      {
+        "name": "status",
+        "required": true,
+        "type": "enum",
+        "description": "draft, planned, in_process, paused, completed, cancelled"
       }
     ]
   },

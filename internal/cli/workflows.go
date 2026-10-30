@@ -57,7 +57,11 @@ func operationError(e error) error {
 	}
 	var pe *portal.Error
 	if errors.As(e, &pe) {
-		return &ExitError{Code: pe.Code, Msg: pe.Error(), Details: map[string]interface{}{"stage": pe.Stage, "ticket_id": pe.TicketID}}
+		details := map[string]interface{}{"stage": pe.Stage, "ticket_id": pe.TicketID}
+		if pe.CampaignID != "" {
+			details["campaign_id"] = pe.CampaignID
+		}
+		return &ExitError{Code: pe.Code, Msg: pe.Error(), Details: details}
 	}
 	if errors.Is(e, sql.ErrNoRows) {
 		return exitf(5, "Not found in local archive")
