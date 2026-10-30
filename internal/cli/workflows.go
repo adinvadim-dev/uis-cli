@@ -193,6 +193,33 @@ func emit(g *globalFlags, v interface{}) error {
 	}
 	return writeResult(g, b)
 }
+// pageObjects applies optional status/query filters and limit/page locally.
+// Used for live support lists because provider offset/limit/status query params 500.
+func pageObjects(rows []portal.Object, status, query string, limit, page int) []portal.Object {
+	out := []portal.Object{}
+	skip := (page - 1) * limit
+	q := strings.ToLower(query)
+	for _, o := range rows {
+		if status != "" && fmt.Sprint(o["status"]) != status {
+			continue
+		}
+		if q != "" {
+			b, _ := json.Marshal(o)
+			if !strings.Contains(strings.ToLower(string(b)), q) {
+				continue
+			}
+		}
+		if skip > 0 {
+			skip--
+			continue
+		}
+		if len(out) < limit {
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
 func positive(v string) (json.Number, error) {
 	n, e := strconv.ParseInt(v, 10, 64)
 	if e != nil || n <= 0 {
@@ -446,11 +473,7 @@ func newCalls(g *globalFlags) *cobra.Command {
 type supportSource struct{ c *portal.Client }
 
 func (s supportSource) Tickets(ctx context.Context, offset, limit int) ([]portal.Object, error) {
-	v, e := s.c.Read(ctx, "tech-support", url.Values{"category": {"single", "multiple"}, "offset": {strconv.Itoa(offset)}, "limit": {strconv.Itoa(limit)}})
-	if e != nil {
-		return nil, e
-	}
-	return portal.Rows(v)
+	return s.c.Tickets(ctx, offset, limit)
 }
 func (s supportSource) Comments(ctx context.Context, t portal.Object, offset, limit int) ([]portal.Object, error) {
 	return s.c.Comments(ctx, t, offset, limit)
@@ -502,10 +525,10 @@ func newSupport(g *globalFlags) *cobra.Command {
 			resource := "contact"
 			q := url.Values{}
 			if kind == "topic" {
+				// Live infopin accepts availability filters; sort=order_num returns HTTP 500.
 				resource = "tech-support-web-type"
 				q.Set("is_available", "true")
 				q.Set("is_active_customer", "true")
-				q.Set("sort", "order_num")
 			}
 			v, e := pc.Read(context.Background(), resource, q)
 			if e != nil {
@@ -603,30 +626,30 @@ func newSupport(g *globalFlags) *cobra.Command {
 					if err != nil {
 						return operationError(err)
 					}
-					comments := []portal.Object{}
-					for offset := 0; ; offset += 100 {
-						r, err := pc.Comments(context.Background(), t, offset, 100)
-						if err != nil {
-							return operationError(err)
-						}
-						comments = append(comments, r...)
-						if len(r) < 100 {
-							break
-						}
+					comments, err := pc.Comments(context.Background(), t, 0, 0)
+					if err != nil {
+						return operationError(err)
 					}
 					v = map[string]interface{}{"ticket": t, "comments": comments}
 				} else {
-					q := url.Values{"offset": {strconv.Itoa((page - 1) * limit)}, "limit": {strconv.Itoa(limit)}}
-					if status != "" {
-						q.Set("status", status)
-					}
+					// Live list rejects offset/limit/status query params; _q works.
+					// Fetch the working unfiltered (or _q) set and page/filter locally.
 					if action == "search" {
 						query = args[0]
 					}
+					q := url.Values{}
 					if query != "" {
 						q.Set("_q", query)
 					}
-					v, e = pc.Read(context.Background(), "tech-support", q)
+					raw, err := pc.Read(context.Background(), "tech-support", q)
+					if err != nil {
+						return operationError(err)
+					}
+					rows, err := portal.Rows(raw)
+					if err != nil {
+						return operationError(err)
+					}
+					v = pageObjects(rows, status, "", limit, page)
 				}
 			} else {
 				s, e = archive.Open(profile.State(name))

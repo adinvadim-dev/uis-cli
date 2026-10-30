@@ -224,16 +224,50 @@ func (c *Client) Ticket(ctx context.Context, id string) (Object, error) {
 	}
 	return nil, &Error{Code: 5, Stage: "ticket"}
 }
+// Comments loads the full thread for a ticket. Live infopin rejects
+// sort/order/offset/limit on this resource (HTTP 500), so callers that still
+// pass offset/limit get the full set only on offset 0 and an empty page after.
 func (c *Client) Comments(ctx context.Context, t Object, offset, limit int) ([]Object, error) {
+	if offset > 0 {
+		return nil, nil
+	}
 	ns, ok := t["is_ticket"].(bool)
 	if !ok {
 		return nil, &Error{Code: 7, Stage: "namespace"}
 	}
-	v, e := c.Read(ctx, "tech-support-comment", url.Values{"tech_support_id": {ID(t)}, "is_ticket": {strconv.FormatBool(ns)}, "sort": {"date_time"}, "order": {"ASC"}, "offset": {strconv.Itoa(offset)}, "limit": {strconv.Itoa(limit)}})
+	v, e := c.Read(ctx, "tech-support-comment", url.Values{"tech_support_id": {ID(t)}, "is_ticket": {strconv.FormatBool(ns)}})
 	if e != nil {
 		return nil, e
 	}
-	return Rows(v)
+	rows, e := Rows(v)
+	if e != nil {
+		return nil, e
+	}
+	if limit > 0 && len(rows) > limit {
+		rows = rows[:limit]
+	}
+	return rows, nil
+}
+
+// Tickets loads the account support list. Live infopin rejects
+// category/offset/limit query params (HTTP 500); the unfiltered list is the
+// working contract. offset>0 returns an empty page so archive sync terminates.
+func (c *Client) Tickets(ctx context.Context, offset, limit int) ([]Object, error) {
+	if offset > 0 {
+		return nil, nil
+	}
+	v, e := c.Read(ctx, "tech-support", nil)
+	if e != nil {
+		return nil, e
+	}
+	rows, e := Rows(v)
+	if e != nil {
+		return nil, e
+	}
+	if limit > 0 && len(rows) > limit {
+		rows = rows[:limit]
+	}
+	return rows, nil
 }
 // validateAttachments checks every path is readable and ≤10 MiB before any
 // provider write. Create must call this before the ticket POST so a local

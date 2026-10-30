@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -157,6 +158,41 @@ func TestProbeAuthenticatedReadBeforeCreate(t *testing.T) {
 		t.Fatal("empty session must fail probe")
 	}
 }
+func TestTicketsAndCommentsOmitBrokenQueryParams(t *testing.T) {
+	var ticketQS, commentQS string
+	c := fake(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/infopin/tech-support":
+			ticketQS = r.URL.RawQuery
+			fmt.Fprint(w, `[{"id":1,"is_ticket":true,"status":"waiting_customer"},{"id":2,"is_ticket":true,"status":"close_operator"}]`)
+		case "/infopin/tech-support-comment":
+			commentQS = r.URL.RawQuery
+			fmt.Fprint(w, `[{"id":10,"tech_support_id":1},{"id":11,"tech_support_id":1}]`)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+	rows, e := c.Tickets(context.Background(), 0, 1)
+	if e != nil || len(rows) != 1 || ID(rows[0]) != "1" || ticketQS != "" {
+		t.Fatalf("tickets page0: %v n=%d qs=%q", e, len(rows), ticketQS)
+	}
+	more, e := c.Tickets(context.Background(), 1, 1)
+	if e != nil || len(more) != 0 {
+		t.Fatalf("tickets page1 should be empty: %v %#v", e, more)
+	}
+	comments, e := c.Comments(context.Background(), Object{"id": json.Number("1"), "is_ticket": true}, 0, 0)
+	if e != nil || len(comments) != 2 || commentQS != "is_ticket=true&tech_support_id=1" {
+		t.Fatalf("comments: %v n=%d qs=%q", e, len(comments), commentQS)
+	}
+	if strings.Contains(commentQS, "offset") || strings.Contains(commentQS, "limit") || strings.Contains(commentQS, "sort") {
+		t.Fatalf("broken comment query still sent: %q", commentQS)
+	}
+	empty, e := c.Comments(context.Background(), Object{"id": json.Number("1"), "is_ticket": true}, 100, 100)
+	if e != nil || len(empty) != 0 {
+		t.Fatalf("comment offset>0 must be empty: %v %#v", e, empty)
+	}
+}
+
 func TestStatusReconcilesStoredNameAfterLostAck(t *testing.T) {
 	puts := 0
 	gets := 0
