@@ -225,8 +225,10 @@ func (c *Client) Ticket(ctx context.Context, id string) (Object, error) {
 	return nil, &Error{Code: 5, Stage: "ticket"}
 }
 // Comments loads the full thread for a ticket. Live infopin rejects
-// sort/order/offset/limit on this resource (HTTP 500), so callers that still
-// pass offset/limit get the full set only on offset 0 and an empty page after.
+// sort/order/offset/limit on this resource (HTTP 500). The full set is
+// returned on offset 0; later offsets are empty so archive sync terminates
+// without re-fetching. limit is ignored so a page size smaller than the
+// thread cannot drop comments.
 func (c *Client) Comments(ctx context.Context, t Object, offset, limit int) ([]Object, error) {
 	if offset > 0 {
 		return nil, nil
@@ -239,19 +241,14 @@ func (c *Client) Comments(ctx context.Context, t Object, offset, limit int) ([]O
 	if e != nil {
 		return nil, e
 	}
-	rows, e := Rows(v)
-	if e != nil {
-		return nil, e
-	}
-	if limit > 0 && len(rows) > limit {
-		rows = rows[:limit]
-	}
-	return rows, nil
+	return Rows(v)
 }
 
 // Tickets loads the account support list. Live infopin rejects
 // category/offset/limit query params (HTTP 500); the unfiltered list is the
-// working contract. offset>0 returns an empty page so archive sync terminates.
+// working contract. The full set is returned on offset 0; later offsets are
+// empty so archive sync terminates. limit is ignored so a sync page size
+// smaller than the account list cannot drop tickets.
 func (c *Client) Tickets(ctx context.Context, offset, limit int) ([]Object, error) {
 	if offset > 0 {
 		return nil, nil
@@ -260,14 +257,7 @@ func (c *Client) Tickets(ctx context.Context, offset, limit int) ([]Object, erro
 	if e != nil {
 		return nil, e
 	}
-	rows, e := Rows(v)
-	if e != nil {
-		return nil, e
-	}
-	if limit > 0 && len(rows) > limit {
-		rows = rows[:limit]
-	}
-	return rows, nil
+	return Rows(v)
 }
 // validateAttachments checks every path is readable and ≤10 MiB before any
 // provider write. Create must call this before the ticket POST so a local

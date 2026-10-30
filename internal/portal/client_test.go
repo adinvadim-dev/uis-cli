@@ -173,8 +173,8 @@ func TestTicketsAndCommentsOmitBrokenQueryParams(t *testing.T) {
 		}
 	})
 	rows, e := c.Tickets(context.Background(), 0, 1)
-	if e != nil || len(rows) != 1 || ID(rows[0]) != "1" || ticketQS != "" {
-		t.Fatalf("tickets page0: %v n=%d qs=%q", e, len(rows), ticketQS)
+	if e != nil || len(rows) != 2 || ID(rows[0]) != "1" || ticketQS != "" {
+		t.Fatalf("tickets page0 must return full set (ignore limit): %v n=%d qs=%q", e, len(rows), ticketQS)
 	}
 	more, e := c.Tickets(context.Background(), 1, 1)
 	if e != nil || len(more) != 0 {
