@@ -22,7 +22,7 @@ Private source: supervisor-workplace frontend build 2026-10-19T12:32:02.617Z, ch
 | Create campaign | private | POST /auto_call/campaign | autodial create --payload-file | dry-run-only; default start semantics and safe cleanup unverified |
 | Edit settings / phone_list / attempts / schedule | private | PUT /auto_call/campaign?campaign_id | autodial update ID --payload-file | dry-run-only; saving draft may set new_status=planned |
 | Start/resume/pause/stop | private | PATCH /auto_call/campaign?campaign_id | autodial status ID --payload-file | dry-run-only; consult statuses, never guess next_statuses |
-| Validate numbers | private | POST /auto_call/campaign/validate_numbers | autodial validate --payload-file | verified-live (empty list); returns numbers, does not persist campaign |
+| Validate numbers | private | POST /auto_call/campaign/validate_numbers | autodial validate --payload-file | verified-live (empty list and invalid phone rejection); returns numbers, does not persist campaign |
 | CSV/XLSX import | private | POST /auto_call/campaign/import_numbers multipart file + old_numbers | autodial import | blocked: multipart parsing contract not verified; no guessed local XLSX conversion |
 | Clear contacts | private | Replace phone_list via campaign PUT | autodial update ID --payload-file | dry-run-only; no atomic append/clear endpoint observed |
 | Delete/archive campaign | private | Not observed | autodial delete ID | blocked: no deletion/archival endpoint established; cancelled is not deletion |
@@ -45,3 +45,11 @@ JWT-only candidate CLI requests succeeded on mini: statuses, employees, exclusio
 Get returned an object with id, status, phone_list and the settings above, plus max_parallel_calls_count, staff_group_id, message_template, operator_comment, is_operator_auto_answer_enabled and numa_dnd_interval. Call/subscriber stats returned chart_data, grid_data, name, status. Export returned an empty array for the selected campaign/status query: nonempty export columns and completeness remain unverified. Validation of numbers=[] returned numbers=[]. The adapter checks minimum per-operation shapes and requested get identity, not every provider field.
 
 The isolated opt-in `TestProductionAutodial` passed on mini for statuses, employees and exclusions. No campaign mutation, start/resume, audio preview, contact change or spending occurred. Campaign create/delete cleanup and write-principal contracts remain blockers; successful reads do not establish these contracts.
+
+## Repeatable command-level E2E
+
+`TestProductionAutodial` now exercises every private command plus all four official methods through generated and low-level routes. Private reads dispatch; private writes prove dry-run and forced refusal; unsupported import/delete prove capability-unavailable. Write checks have independently unusable credentials and sessions, protecting production even if a guard regresses. Official mutations prove dry-run and confirmation refusal, never forced dispatch. Official live listing reports missing Data API credentials explicitly, rather than treating a skipped request as provider success.
+
+Export input follows the cabinet UI in `40784.eb87b0fb.js`: `SUBSCRIBER_STATUSES=["unsuccessfully_processed","not_processed"]`, returned columns `numa`, `campaign_name`, `status_name`. Passing every Data API contact status to this private export was rejected by the provider; the surfaces' status domains must not be conflated. Validation tests use an invalid string and require validation_error, rather than sending a callable number.
+
+Final expanded opt-in run on mini (2026-10-30): PASS, 21 subtests passed and one explicitly skipped (official live list: authentication_required, no Data API credential). All nine supervisor reads passed, including nonempty export rows with the cabinet's three string columns and rejection of a non-callable invalid number. Six private-write plan/force guards, two unavailable contracts and four official dual-route plan/confirmation tests passed. No writes or calls were dispatched. Local make build/check and production-tag compilation also passed; local opt-in execution was skipped by design.
