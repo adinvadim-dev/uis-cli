@@ -103,3 +103,9 @@ Verified on mini: 24 subtests PASS, zero SKIP with exclusion-write opt-in. CSV/X
 Recovery tests also run without the production build tag or network. A timed-out add followed only by absent reads retains add_unresolved: a late server commit must never be recorded as cleanup_verified. An acknowledged or positively observed add can be compensated and verified. The late-commit regression fails without that fence and passes with it.
 
 If persisting remove_dispatch fails, cleanup does not send DELETE: the preceding unresolved/acknowledged-add journal state is retained for manual recovery. A separate offline regression verifies this failure never bypasses durable dispatch recording.
+
+## Empty campaign create probe: unresolved provider response
+
+After explicit authorization to retain one empty cancelled test campaign, one direct authenticated provider probe requested an empty draft (no recipients/employees, future date, audio disabled). It returned HTTP 500 with root value_error.exception and no ID. Three follow-up exact-marker list reads found no resource; the durable journal remains create_unresolved. The POST was not repeated. This empty DTO is not established as a valid full campaign create contract, so the result does not prove that all create requests fail.
+
+Campaign update, contact and status write E2E remain blocked by the missing owned fixture. Never turn an absent read after a 5xx into successful cleanup or an automatic retry. Reconcile the first dispatch/provider contract before any new creation; preserve the one-resource authorization. The production read/import/exclusion suite remains separate from this unsuccessful create probe.

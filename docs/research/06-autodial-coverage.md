@@ -19,7 +19,7 @@ Private source: supervisor-workplace frontend build 2026-10-19T12:32:02.617Z, ch
 | Employee groups | private | GET /auto_call/employees_in_groups | autodial employees | verified-live |
 | Stop-list read | private | GET /auto_call/excluded_numa | autodial stop-list | verified-live |
 | Stop-list add/remove | private | POST/DELETE /auto_call/excluded_numa?numa | autodial exclude/include --payload-file | verified-live POST/DELETE 204 plus read-back, synthetic fixture removed |
-| Create campaign | private | POST /auto_call/campaign | autodial create --payload-file | dry-run-only; default start semantics and safe cleanup unverified |
+| Create campaign | private | POST /auto_call/campaign | autodial create --payload-file | live empty-draft probe: HTTP 500, value_error.exception at __root__; outcome unknown, no identity recovered; CLI remains gated |
 | Edit settings / phone_list / attempts / schedule | private | PUT /auto_call/campaign?campaign_id | autodial update ID --payload-file | dry-run-only; saving draft may set new_status=planned |
 | Start/resume/pause/stop | private | PATCH /auto_call/campaign?campaign_id | autodial status ID --payload-file | dry-run-only; consult statuses, never guess next_statuses |
 | Validate numbers | private | POST /auto_call/campaign/validate_numbers | autodial validate --payload-file | verified-live (empty list and invalid phone rejection); returns numbers, does not persist campaign |
@@ -73,3 +73,11 @@ Safe campaign cleanup is still unresolved: current frontend handlers expose canc
 Review found and corrected a recovery-journal race: absent reads cannot certify cleanup after an unresolved add, which may commit later. The harness retains add_unresolved unless the add was acknowledged or observed before compensation. Offline late-commit regression demonstrated failure without this fence and success with it; it runs in the ordinary Go suite without production access.
 
 A second recovery review finding was fixed: cleanup must stop before DELETE if persisting remove_dispatch fails. The offline regression fails when the stage error is ignored and passes when dispatch is fenced. Both journal failures leave explicit recovery state; successful cleanup remains separately verified live.
+
+## Authorized empty campaign probe (2026-10-30)
+
+The owner explicitly allowed one empty test campaign to remain cancelled if delete/archive is unavailable. A single authenticated POST /auto_call/campaign used a unique test marker, status=draft, phone_list=[], employee_ids=[], a future begin_date and disabled audio. No caller capacity was selected; this is an empty-draft probe, not a proven valid full campaign DTO. These empty lists prevent dialing even if the requested draft status is ignored.
+
+Result: HTTP 500 with a root exception envelope (loc=[__root__], type=value_error.exception, generic server-failure category). No ID was returned. Three subsequent supervisor-list reads found no exact test-marker match. This is not successful create/cleanup proof, nor proof that every valid campaign payload fails. HTTP 500 remains outcome_unknown; absence in reads does not exclude a late commit. The protected durable journal retains create_unresolved and the original marker; no second POST was sent and no cleanup_verified stage was invented.
+
+Dependent campaign update/schedule, contact add/remove and status mutations were not dispatched because no owned test identity could be established. Existing business campaigns were not used as write fixtures. No campaign start/resume/audio preview, customer call or spend was initiated. A provider-supported non-starting create contract and reconciliation of the first dispatch are required before another create attempt. The previously verified 24-subtest read/import/exclusion suite does not imply this create probe succeeded.
