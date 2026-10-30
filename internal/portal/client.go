@@ -224,12 +224,36 @@ func (c *Client) Ticket(ctx context.Context, id string) (Object, error) {
 	}
 	return nil, &Error{Code: 5, Stage: "ticket"}
 }
+// Comments loads the full thread for a ticket. Live infopin rejects
+// sort/order/offset/limit on this resource (HTTP 500). The full set is
+// returned on offset 0; later offsets are empty so archive sync terminates
+// without re-fetching. limit is ignored so a page size smaller than the
+// thread cannot drop comments.
 func (c *Client) Comments(ctx context.Context, t Object, offset, limit int) ([]Object, error) {
+	if offset > 0 {
+		return nil, nil
+	}
 	ns, ok := t["is_ticket"].(bool)
 	if !ok {
 		return nil, &Error{Code: 7, Stage: "namespace"}
 	}
-	v, e := c.Read(ctx, "tech-support-comment", url.Values{"tech_support_id": {ID(t)}, "is_ticket": {strconv.FormatBool(ns)}, "sort": {"date_time"}, "order": {"ASC"}, "offset": {strconv.Itoa(offset)}, "limit": {strconv.Itoa(limit)}})
+	v, e := c.Read(ctx, "tech-support-comment", url.Values{"tech_support_id": {ID(t)}, "is_ticket": {strconv.FormatBool(ns)}})
+	if e != nil {
+		return nil, e
+	}
+	return Rows(v)
+}
+
+// Tickets loads the account support list. Live infopin rejects
+// category/offset/limit query params (HTTP 500); the unfiltered list is the
+// working contract. The full set is returned on offset 0; later offsets are
+// empty so archive sync terminates. limit is ignored so a sync page size
+// smaller than the account list cannot drop tickets.
+func (c *Client) Tickets(ctx context.Context, offset, limit int) ([]Object, error) {
+	if offset > 0 {
+		return nil, nil
+	}
+	v, e := c.Read(ctx, "tech-support", nil)
 	if e != nil {
 		return nil, e
 	}
