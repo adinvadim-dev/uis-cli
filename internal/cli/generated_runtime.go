@@ -3,7 +3,6 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 
@@ -45,12 +44,20 @@ func addGeneratedResourceCommands(root *cobra.Command, g *globalFlags) {
 			Short: r.Title,
 			Long:  r.Title,
 		}
+		for _, existing := range root.Commands() {
+			if existing.Name() == r.Command {
+				rc = existing
+				break
+			}
+		}
 		for _, m := range r.Methods {
 			m := m
 			mc := newGeneratedMethodCmd(g, r, m)
 			rc.AddCommand(mc)
 		}
-		root.AddCommand(rc)
+		if rc.Parent() == nil {
+			root.AddCommand(rc)
+		}
 	}
 }
 
@@ -95,9 +102,6 @@ func newGeneratedMethodCmd(g *globalFlags, r GenResource, m GenMethod) *cobra.Co
 			_, cfg, err := loadEffectiveConfig(g)
 			if err != nil {
 				return err
-			}
-			if cfg.AccessToken == "" && !g.DryRun {
-				return exitf(10, "Missing access token. Set UIS_TOKEN env var or run `uis auth login`.")
 			}
 
 			params, err := parseParams(paramKVs, paramsJSON, paramsFile)
@@ -145,40 +149,7 @@ func newGeneratedMethodCmd(g *globalFlags, r GenResource, m GenMethod) *cobra.Co
 				}
 			}
 
-			if g.DryRun {
-				return writeDryRunRequest(g, m.Method, params)
-			}
-
-			cl, err := newClient(cfg)
-			if err != nil {
-				return err
-			}
-			ctx, cancel, err := ctxWithTimeout(cfg)
-			if err != nil {
-				return err
-			}
-			defer cancel()
-
-			resp, httpStatus, raw, err := cl.Call(ctx, m.Method, params)
-			if err != nil {
-				if httpStatus == 401 || httpStatus == 403 {
-					return exitf(10, "HTTP %d calling %s: %v", httpStatus, m.Method, err)
-				}
-				if httpStatus == 429 {
-					return exitf(11, "HTTP 429 calling %s: %v", m.Method, err)
-				}
-				return exitf(12, "HTTP error calling %s: %v", m.Method, err)
-			}
-			if resp.Error != nil {
-				return exitf(12, "%s: %s", m.Method, resp.Error.String())
-			}
-
-			if len(resp.Result) > 0 {
-				return writeResult(g, resp.Result)
-			}
-
-			_, _ = os.Stdout.Write(append(raw, '\n'))
-			return nil
+			return runRPC(g, m.Method, params)
 		},
 	}
 

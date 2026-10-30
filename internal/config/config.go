@@ -12,7 +12,7 @@ type Config struct {
 	AccessToken string `json:"access_token"`
 	APIHost     string `json:"api_host"`
 	APIVersion  string `json:"api_version"`
-	Timeout     string `json:"timeout"` // duration, e.g. "60s"
+	Timeout     string `json:"timeout"` // duration, e.g. "30s"
 	Retries     int    `json:"retries"`
 }
 
@@ -20,7 +20,7 @@ func Default() Config {
 	return Config{
 		APIHost:    "dataapi.uiscom.ru",
 		APIVersion: "v2.0",
-		Timeout:    "60s",
+		Timeout:    "30s",
 		Retries:    3,
 	}
 }
@@ -92,7 +92,7 @@ func Save(path string, cfg Config) error {
 
 func (c Config) TimeoutDuration() (time.Duration, error) {
 	if c.Timeout == "" {
-		return 60 * time.Second, nil
+		return 30 * time.Second, nil
 	}
 	return time.ParseDuration(c.Timeout)
 }

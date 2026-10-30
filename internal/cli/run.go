@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
@@ -17,6 +18,7 @@ import (
 
 	"uis-cli/internal/client"
 	"uis-cli/internal/config"
+	"uis-cli/internal/profile"
 )
 
 type globalFlags struct {
@@ -28,8 +30,12 @@ type globalFlags struct {
 	Retries    int
 	RetriesSet bool
 
-	JSON bool
-	DryRun bool
+	Account string
+	Command string
+	Plain   bool
+	Force   bool
+	JSON    bool
+	DryRun  bool
 
 	Pretty  bool
 	Quiet   bool
@@ -40,15 +46,27 @@ type globalFlags struct {
 func Run(args []string) int {
 	cmd := newRootCmd()
 	cmd.SetArgs(args)
-	if err := cmd.Execute(); err != nil {
+	if executed, err := cmd.ExecuteC(); err != nil {
+		code := 1
 		var ee *ExitError
 		if errors.As(err, &ee) {
-			_, _ = fmt.Fprintln(os.Stderr, ee.Msg)
-			return ee.Code
+			code = ee.Code
 		}
-		_, _ = fmt.Fprintln(os.Stderr, err.Error())
-		return 1
+		jsonOutput, _ := cmd.PersistentFlags().GetBool("json")
+		if jsonOutput {
+			names := map[int]string{1: "execution_failed", 2: "invalid_usage", 3: "authentication_required", 4: "permission_denied", 5: "not_found", 6: "provider_error", 7: "capability_unavailable", 8: "rate_limited", 9: "outcome_unknown", 10: "confirmation_required"}
+			details := map[string]interface{}{}
+			if ee != nil && ee.Details != nil {
+				details = ee.Details
+			}
+			b, _ := json.Marshal(map[string]interface{}{"ok": false, "schemaVersion": "uis.cli/v1", "command": strings.TrimPrefix(executed.CommandPath(), "uis "), "error": map[string]interface{}{"code": names[code], "message": safeError(code), "details": details}})
+			fmt.Fprintln(os.Stdout, string(b))
+		} else {
+			fmt.Fprintln(os.Stderr, err.Error())
+		}
+		return code
 	}
+
 	return 0
 }
 
@@ -57,10 +75,17 @@ func newRootCmd() *cobra.Command {
 
 	root := &cobra.Command{
 		Use:           "uis",
-		Short:         "CLI for UIS Data API (JSON-RPC)",
+		Short:         "UIS support, calls and Data API",
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			g.Command = strings.TrimPrefix(cmd.CommandPath(), "uis ")
+			if g.JSON && g.Plain {
+				return exitf(2, "--json and --plain are mutually exclusive")
+			}
+			if _, err := timeout(g); err != nil {
+				return err
+			}
 			// Track which flags were explicitly set (so config/env can still win otherwise).
 			if cmd.Root().PersistentFlags().Changed("retries") {
 				g.RetriesSet = true
@@ -81,13 +106,27 @@ func newRootCmd() *cobra.Command {
 	root.PersistentFlags().IntVar(&g.Retries, "retries", 3, "Retry count for transient HTTP errors (env: UIS_RETRIES)")
 
 	root.PersistentFlags().BoolVar(&g.JSON, "json", false, "Output result as JSON (default: human-readable)")
-	root.PersistentFlags().BoolVar(&g.DryRun, "dry-run", false, "Do not call the API; print the JSON-RPC request that would be sent")
+	root.PersistentFlags().BoolVarP(&g.DryRun, "dry-run", "n", false, "Do not call the API; print the JSON-RPC request that would be sent")
 	root.PersistentFlags().BoolVar(&g.Pretty, "pretty", false, "Pretty-print JSON output (default: true on TTY)")
 	root.PersistentFlags().BoolVarP(&g.Quiet, "quiet", "q", false, "Suppress non-essential output (errors still go to stderr)")
 	root.PersistentFlags().BoolVarP(&g.Verbose, "verbose", "v", false, "Verbose diagnostics to stderr")
 	root.PersistentFlags().BoolVar(&g.NoInput, "no-input", false, "Disable prompts; fail if required input is missing")
 
+	root.PersistentFlags().StringVar(&g.Account, "account", "", "Account profile (UIS_ACCOUNT)")
+	root.PersistentFlags().BoolVar(&g.Plain, "plain", false, "Stable plain output")
+	root.PersistentFlags().BoolVarP(&g.Force, "force", "f", false, "Confirm requested mutation")
+	root.PersistentFlags().Bool("no-color", false, "Disable color")
 	root.AddCommand(newAuthCmd(g))
+	root.AddCommand(newAccounts(g), newCalls(g), newSupport(g))
+	root.AddCommand(newDiscovery(g, "filters", map[string]string{"list": "get.report_filters", "show": "get.custom_filters", "rapid": "get.report_rapid_filters"}))
+	root.AddCommand(newDiscovery(g, "reports", map[string]string{"list": "get.reports_list"}))
+	capability := &cobra.Command{Use: "capability"}
+	for _, action := range []string{"list", "probe"} {
+		capability.AddCommand(&cobra.Command{Use: action, RunE: func(cmd *cobra.Command, args []string) error {
+			return emit(g, map[string]interface{}{"dataapi": "available_with_credentials", "support_archive": "local-sqlite", "private_reads": "requires_promoted_session", "private_login": "credential_binding_and_authenticated_read", "private_mutations": "promoted_session_plus_authenticated_read_probe", "rapid_saved_filters": "provider_entitlement_required"})
+		}})
+	}
+	root.AddCommand(capability)
 	root.AddCommand(newConfigCmd(g))
 	root.AddCommand(newSpecCmd(g))
 	root.AddCommand(newCallCmd(g))
@@ -129,10 +168,26 @@ func loadEffectiveConfig(g *globalFlags) (string, config.Config, error) {
 	}
 
 	cfg, err := config.Load(cfgPath)
+	if err != nil && strings.HasSuffix(cfgPath, ".toml") {
+		_, profileErr := profile.Load(cfgPath)
+		cfg = config.Default()
+		err = profileErr
+	}
 	if err != nil {
 		return "", config.Config{}, exitf(1, "Failed to load config %s: %v", cfgPath, err)
 	}
 
+	profiles := profile.Config{}
+	var profileErr error
+	if !strings.HasSuffix(profileConfigPath(g), ".json") {
+		profiles, profileErr = profile.Load(profileConfigPath(g))
+	}
+	if profileErr != nil {
+		return "", config.Config{}, exitf(2, "Invalid profile config")
+	}
+	if g.Account != "" || os.Getenv("UIS_ACCOUNT") != "" || profiles.DefaultAccount != "" {
+		cfg.AccessToken = ""
+	}
 	// Env overrides
 	if v := os.Getenv("UIS_TOKEN"); v != "" {
 		cfg.AccessToken = v
@@ -171,7 +226,7 @@ func loadEffectiveConfig(g *globalFlags) (string, config.Config, error) {
 
 func newClient(cfg config.Config) (*client.Client, error) {
 	to, err := cfg.TimeoutDuration()
-	if err != nil {
+	if err != nil || to <= 0 || to > 5*time.Minute {
 		return nil, exitf(2, "Invalid timeout %q (expected duration like 60s): %v", cfg.Timeout, err)
 	}
 	base := fmt.Sprintf("https://%s/%s", strings.TrimSuffix(cfg.APIHost, "/"), strings.TrimPrefix(cfg.APIVersion, "/"))
@@ -251,6 +306,9 @@ func parseParams(paramKVs []string, paramsJSON string, paramsFile string) (map[s
 }
 
 func writeJSON(g *globalFlags, v any) error {
+	if g.JSON {
+		v = map[string]interface{}{"ok": true, "schemaVersion": "uis.cli/v1", "command": g.Command, "data": v}
+	}
 	var b []byte
 	var err error
 	if g.Pretty {
@@ -303,4 +361,8 @@ func ctxWithTimeout(cfg config.Config) (context.Context, context.CancelFunc, err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), to)
 	return ctx, cancel, nil
+}
+
+func safeError(code int) string {
+	return map[int]string{1: "Execution failed", 2: "Invalid command or parameters", 3: "Credentials or private session required", 4: "Permission denied", 5: "Not found", 6: "Provider request failed", 7: "Capability unavailable; see capability list and docs/IMPLEMENTATION.md", 8: "Rate limited", 9: "Outcome unknown; do not resend automatically", 10: "Confirmation required; review --dry-run then use --force"}[code]
 }
