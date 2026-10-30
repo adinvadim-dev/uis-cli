@@ -224,6 +224,7 @@ func (c *Client) Ticket(ctx context.Context, id string) (Object, error) {
 	}
 	return nil, &Error{Code: 5, Stage: "ticket"}
 }
+
 // Comments loads the full thread for a ticket. Live infopin rejects
 // sort/order/offset/limit on this resource (HTTP 500). The full set is
 // returned on offset 0; later offsets are empty so archive sync terminates
@@ -259,6 +260,7 @@ func (c *Client) Tickets(ctx context.Context, offset, limit int) ([]Object, erro
 	}
 	return Rows(v)
 }
+
 // validateAttachments checks every path is readable and ≤10 MiB before any
 // provider write. Create must call this before the ticket POST so a local
 // attachment failure cannot leave an orphan ticket.
@@ -312,6 +314,7 @@ func multipartBody(fields Object, files []string) (*bytes.Buffer, string, error)
 	e = w.Close()
 	return &b, w.FormDataContentType(), e
 }
+
 // ProbeAuthenticatedRead proves the Go session can still perform an
 // authenticated support metadata read. Write preflight uses this (or an
 // injected Verify) before dispatch. It is credential-binding + live read
@@ -423,7 +426,7 @@ func (c *Client) Status(ctx context.Context, id, status string) (Object, error) 
 	after, e := c.Ticket(ctx, id)
 	if e == nil {
 		got := fmt.Sprint(after["status"])
-		if (status == "closed" && (got == "close_customer" || got == "close_operator" || got == "canceled")) || (status == "created" && got == "created") {
+		if (status == "closed" && (got == "close_customer" || got == "close_operator" || got == "canceled")) || (status == "created" && (got == "created" || got == "waiting_operator")) {
 			return after, nil
 		}
 	}
