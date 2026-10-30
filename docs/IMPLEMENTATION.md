@@ -24,7 +24,7 @@ The authorized fallback archive uses local SQLite / FTS4 (CGO), staying on Go 1.
 - **Archive:** crawlkit migration, exact crawlctl manifest interoperability, failed-page inventory, incremental resume, attachment bytes, pruning/deletion reconciliation and per-thread completion markers remain follow-up work. The compatible schema label does not certify crawlctl integration.
 - **Secondary commands:** private balance and recording download are not implemented. Saved-filter writes, sales, recognition, exports, chats, CDR archives and originate remain out of scope.
 
-The PR remains draft while live provider compatibility (especially paid captcha login and a real support write) is unverified on this account. No live mutations may be used to prove remaining gaps without separate authorization.
+Opt-in [production E2E](PRODUCTION_E2E.md) exercises fresh captcha-backed login and read compatibility. A separately authorized support-write scenario uses one clearly marked test ticket, verifies messages and status through live reads, and closes it at the end. Writes still require explicit opt-in and account fixtures; arbitrary generated mutations are not part of the suite. Live infopin stores `waiting_operator` after creation/reopening; reopen reconciliation accepts that stored state as well as `created`, without replaying the PUT after an uncertain response.
 
 ## Review corrections
 

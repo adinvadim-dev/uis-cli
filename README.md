@@ -2,7 +2,7 @@
 
 Go CLI for UIS calls, filtering, private tech support, and the generated Data API surface. The frozen contracts are in [docs/CLI_SPEC.md](docs/CLI_SPEC.md), [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md) and [docs/archive-contract.md](docs/archive-contract.md).
 
-**Private login and reads are implemented, tested with scripted HTTP servers.** Run `uis auth login --surface private --no-input` (or `refresh`) with an account `expected_login` and external `credential_process` providing portal credentials and `captcha.2captcha_api_key` when challenged. Login obtains separate app/Go tokens and promotes only after credential binding and a successful authenticated support read. This unlocks `support sync`, live ticket reads and private `calls show`. Support mutations remain fail-closed (exit 7): independent principal and CSRF verification for writes are unresolved. No live login, paid captcha or account mutation was used for development. See [implementation status](docs/IMPLEMENTATION.md).
+**Private login, reads and support ticket mutations are implemented.** Run `uis auth login --surface private --no-input` (or `refresh`) with an account `expected_login` and external `credential_process` providing portal credentials and `captcha.2captcha_api_key` when challenged. Login obtains separate app/Go tokens and promotes only after credential binding and a successful authenticated support read. This unlocks `support sync`, live ticket reads and private `calls show`. Support writes re-check account binding and an authenticated support read; a dedicated provider principal/CSRF contract remains unresolved. Opt-in [production E2E](docs/PRODUCTION_E2E.md) covers fresh login, reads and a separately authorized test-ticket lifecycle. See [implementation status](docs/IMPLEMENTATION.md).
 
 ## Build and verify
 
@@ -14,6 +14,8 @@ go test ./...
 go vet ./...
 bin/uis --help
 ```
+
+For opt-in checks against real UIS accounts, see [Production E2E](docs/PRODUCTION_E2E.md) and `make test-production`. The suite is separate from ordinary tests. It performs production reads; a separately enabled support-write scenario creates one test ticket, replies, closes/reopens it and leaves it closed. Other mutation coverage uses dry-run.
 
 ## Credentials
 
