@@ -278,7 +278,8 @@ type cliResult struct {
 	Error   struct {
 		Code    string `json:"code"`
 		Details struct {
-			TicketID string `json:"ticket_id"`
+			TicketID   string `json:"ticket_id"`
+			CampaignID string `json:"campaign_id"`
 		} `json:"details"`
 	} `json:"error"`
 }

@@ -17,7 +17,7 @@ import (
 )
 
 // Real-binary coverage of every autodial route: live reads and write guards.
-// Lifecycle writes stay blocked until non-starting create AND cleanup are proven.
+// New campaign lifecycles require their own explicit residue/write opt-in.
 func TestProductionAutodial(t *testing.T) {
 	if os.Getenv("UIS_E2E_AUTODIAL") != "1" {
 		t.Skip("set UIS_E2E_AUTODIAL=1 to authorize supervisor reads")
@@ -93,12 +93,12 @@ func TestProductionAutodial(t *testing.T) {
 		t.Helper()
 		args = append([]string{"--timeout", "60s", "autodial"}, args...)
 		v := object(t, h.json(t, 0, args...))
-		if v["source"] != "private.supervisor" {
+		if v["source"] != "private.supervisor" && v["source"] != "private.cabinet_rpc" && v["source"] != "private.comagic" {
 			t.Fatal("wrong provenance")
 		}
 		return v["data"]
 	}
-	for _, action := range []string{"statuses", "employees", "stop-list"} {
+	for _, action := range []string{"statuses", "employees", "stop-list", "caller-rules", "caller-numbers", "caller-groups", "caller-lists", "scenarios"} {
 		t.Run("live/"+action, func(t *testing.T) {
 			rows, ok := privateData(t, action).([]any)
 			if !ok {
@@ -120,6 +120,64 @@ func TestProductionAutodial(t *testing.T) {
 			}
 		})
 	}
+	for _, action := range []string{"media", "schedules", "timezone"} {
+		t.Run("live/"+action, func(t *testing.T) {
+			data := object(t, privateData(t, action))
+			if action == "timezone" {
+				if _, ok := data["timezone"].(string); !ok {
+					t.Fatal("missing account timezone")
+				}
+			} else if _, ok := data["data"].([]any); !ok {
+				t.Fatal("catalog array missing")
+			}
+		})
+	}
+	t.Run("live/campaign-lifecycle", func(t *testing.T) { h.autodialCampaignLifecycle(t, account, payloadFile) })
+	t.Run("live/owned-cleanup-reconciliation", func(t *testing.T) {
+		path := os.Getenv("UIS_E2E_AUTODIAL_OWNED_JOURNAL")
+		if path == "" {
+			t.Skip("existing owned lifecycle journal required")
+		}
+		raw, e := os.ReadFile(path)
+		if e != nil {
+			t.Fatal("cannot read owned journal")
+		}
+		var name, id string
+		for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+			var row map[string]any
+			d := json.NewDecoder(strings.NewReader(line))
+			d.UseNumber()
+			if d.Decode(&row) != nil {
+				t.Fatal("invalid ownership journal")
+			}
+			if n, ok := row["name"].(string); ok {
+				name = n
+			}
+			if n := portal.ID(map[string]any{"id": row["campaign_id"]}); providerID.MatchString(n) {
+				id = n
+			}
+		}
+		if !providerID.MatchString(id) || !strings.HasPrefix(name, "uis-cli e2e test") {
+			t.Fatal("ownership marker missing")
+		}
+		c := object(t, privateData(t, "get", id))
+		if c["name"] != name || c["status"] != "cancelled" {
+			t.Fatal("owned cancelled campaign mismatch")
+		}
+		for _, v := range c["phone_list"].([]any) {
+			if object(t, v)["status_mnemonic"] != "deleted" {
+				t.Fatal("active fixture contact remains")
+			}
+		}
+		// Terminal no-ops: they must confirm current cleanup without another mutation.
+		for _, action := range []string{"clear", "cancel"} {
+			data := object(t, object(t, h.json(t, 0, "--force", "autodial", action, id))["data"])
+			if data["verified"] != true || data["no_op"] != true {
+				t.Fatal("cleanup was not a verified no-op")
+			}
+		}
+	})
+
 	from := os.Getenv("UIS_E2E_AUTODIAL_FROM")
 	till := os.Getenv("UIS_E2E_AUTODIAL_TILL")
 	if from == "" {
@@ -235,7 +293,7 @@ func TestProductionAutodial(t *testing.T) {
 			t.Fatal("XLSX parser failed fixture roundtrip")
 		}
 	})
-	// Every blocked write is exercised in a fresh CLI process without usable
+	// Every write plan and confirmation guard is exercised in a fresh CLI process without usable
 	// credentials, using synthetic IDs/content and never a customer target.
 	for _, tc := range []struct {
 		action       string
@@ -243,9 +301,9 @@ func TestProductionAutodial(t *testing.T) {
 		method, path string
 		payload      map[string]any
 	}{
-		{"create", false, "POST", "/auto_call/campaign", map[string]any{"name": "uis-cli e2e test — do not start", "phone_list": []any{}}},
+		{"create", false, "POST", "/auto_call/campaign", map[string]any{"name": "uis-cli e2e test — do not start", "begin_date": "2099-01-01 10:00:00", "employee_ids": []int{8}, "phone_list": []any{map[string]any{"numa": "70000000000"}}, "number_capacity_usage_rule": "fixed", "number_capacity_id": 7}},
 		{"update", true, "PUT", "/auto_call/campaign", map[string]any{"phone_list": []any{}}},
-		{"status", true, "PATCH", "/auto_call/campaign", map[string]any{"status": "in_process"}},
+		{"status", true, "POST", "/v2.0", map[string]any{"status": "in_process"}},
 		{"listen", false, "POST", "/auto_call/campaign/listen_audio_message", map[string]any{"numb": "uis-cli-invalid-number", "playlist": []any{}}},
 	} {
 		t.Run("guard/"+tc.action, func(t *testing.T) {
@@ -256,16 +314,38 @@ func TestProductionAutodial(t *testing.T) {
 			}
 			args = append(args, "--payload-file", payloadFile(tc.action, tc.payload))
 			plan := object(t, h.json(t, 0, append([]string{"--dry-run"}, args...)...))
-			if plan["method"] != tc.method || plan["path"] != tc.path || plan["network"] != false || plan["mutation"] != true || plan["live_enabled"] != false {
+			if plan["method"] != tc.method || plan["path"] != tc.path || plan["network"] != false || plan["mutation"] != true || plan["live_enabled"] != (tc.action != "listen") {
 				t.Fatal("unsafe write plan")
 			}
 			raw, _ := json.Marshal(plan)
 			if strings.Contains(string(raw), "uis-cli-invalid-number") {
 				t.Fatal("plan leaked payload values")
 			}
-			result, code := h.execute(t, append([]string{"--force"}, args...)...)
-			if code != 7 || result.Error.Code != "capability_unavailable" {
-				t.Fatal("force bypassed write guard")
+			if tc.action == "listen" {
+				result, code := h.execute(t, append([]string{"--force"}, args...)...)
+				if code != 7 || result.Error.Code != "capability_unavailable" {
+					t.Fatal("force bypassed preview-call guard")
+				}
+			} else {
+				result, code := h.execute(t, args...)
+				if code != 10 || result.Error.Code != "confirmation_required" {
+					t.Fatal("write bypassed confirmation")
+				}
+			}
+		})
+	}
+
+	for _, action := range []string{"clear", "start", "pause", "resume", "stop", "cancel", "complete", "schedule"} {
+		t.Run("confirmation/"+action, func(t *testing.T) {
+			offlineGuard(t)
+			args := []string{"autodial", action, "1"}
+			plan := object(t, h.json(t, 0, append([]string{"--dry-run"}, args...)...))
+			if plan["live_enabled"] != true || plan["source"] != "private.cabinet_rpc" || plan["mutation"] != true {
+				t.Fatal("wrong control plan")
+			}
+			r, code := h.execute(t, args...)
+			if code != 10 || r.Error.Code != "confirmation_required" {
+				t.Fatal("control bypassed confirmation")
 			}
 		})
 	}

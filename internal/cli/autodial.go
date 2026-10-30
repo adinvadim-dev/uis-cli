@@ -14,10 +14,11 @@ import (
 )
 
 func newAutodial(g *globalFlags) *cobra.Command {
-	root := &cobra.Command{Use: "autodial", Short: "Outgoing campaign reads and guarded mutation plans (private cabinet)"}
-	for _, action := range []string{"list", "get", "statuses", "calls", "subscribers", "employees", "stop-list", "validate", "export", "create", "update", "status", "exclude", "include", "import", "delete", "listen"} {
+	root := &cobra.Command{Use: "autodial", Short: "Outgoing campaigns, contacts and reports (private cabinet)"}
+	for _, action := range []string{"list", "get", "statuses", "calls", "subscribers", "employees", "stop-list", "validate", "export", "create", "update", "status", "exclude", "include", "import", "delete", "listen", "caller-rules", "caller-numbers", "caller-groups", "caller-lists", "media", "scenarios", "schedules", "timezone", "clear", "start", "pause", "resume", "stop", "cancel", "complete", "schedule"} {
 		action := action
-		needsID := action == "get" || action == "calls" || action == "subscribers" || action == "update" || action == "status" || action == "delete"
+		statusAlias := map[string]string{"start": "in_process", "resume": "in_process", "pause": "paused", "stop": "paused", "cancel": "cancelled", "complete": "completed", "schedule": "planned"}[action]
+		needsID := action == "get" || action == "calls" || action == "subscribers" || action == "update" || action == "status" || action == "delete" || action == "clear" || statusAlias != ""
 		use := action
 		argsCheck := cobra.NoArgs
 		if needsID {
@@ -50,6 +51,14 @@ func newAutodial(g *globalFlags) *cobra.Command {
 					return exitf(2, "Payload must be exactly one JSON object")
 				}
 			}
+			dispatchAction := action
+			if statusAlias != "" {
+				if file != "" {
+					return exitf(2, "Status aliases do not accept a payload")
+				}
+				payload["status"] = statusAlias
+				dispatchAction = "status"
+			}
 			switch action {
 			case "list", "export", "validate", "create", "update", "status", "exclude", "include", "listen":
 				if file == "" {
@@ -75,7 +84,17 @@ func newAutodial(g *globalFlags) *cobra.Command {
 					return exitf(2, "Invalid campaign date window")
 				}
 			}
-			r, e := portal.AutodialPlan(action, id, payload)
+			if action == "create" || action == "update" {
+				if e := portal.ValidateCampaignInput(action, payload); e != nil {
+					return operationError(e)
+				}
+			}
+			if dispatchAction == "status" {
+				if e := portal.ValidateCampaignStatus(payload); e != nil {
+					return operationError(e)
+				}
+			}
+			r, e := portal.AutodialPlan(dispatchAction, id, payload)
 			if e != nil {
 				return operationError(e)
 			}
@@ -86,12 +105,22 @@ func newAutodial(g *globalFlags) *cobra.Command {
 			sort.Strings(fields)
 			// Plans deliberately omit values: phone lists, TTS and comments may contain
 			// private information. No credential/session I/O occurs on this path.
-			plan := portal.Object{"source": "private.supervisor", "method": r.Method, "path": r.Path, "campaign_id": id, "payload_fields": fields, "mutation": r.Write, "network": false, "live_enabled": !r.Write || action == "exclude" || action == "include"}
+			source := "private.supervisor"
+			if r.Surface != "" {
+				source = r.Surface
+			}
+			if r.RPCMethod != "" {
+				source = "private.cabinet_rpc"
+			}
+			plan := portal.Object{"source": source, "method": r.Method, "path": r.Path, "campaign_id": id, "payload_fields": fields, "mutation": r.Write, "network": false, "live_enabled": action != "listen"}
+			if r.RPCMethod != "" {
+				plan["rpc_method"] = r.RPCMethod
+			}
 			if g.DryRun {
 				return emit(g, plan)
 			}
 			if r.Write {
-				if action != "exclude" && action != "include" {
+				if action == "listen" {
 					return exitf(7, "Autodial write contract unverified: use --dry-run; see coverage inventory")
 				}
 				if e := confirm(g, plan); e != nil {
@@ -102,11 +131,11 @@ func newAutodial(g *globalFlags) *cobra.Command {
 			if e != nil {
 				return e
 			}
-			v, e := c.Autodial(cmd.Context(), action, id, payload)
+			v, e := c.Autodial(cmd.Context(), dispatchAction, id, payload)
 			if e != nil {
 				return operationError(e)
 			}
-			return emit(g, portal.Object{"source": "private.supervisor", "data": archive.Scrub(v), "limitations": []string{"Source-observed private contract; no snapshot or completeness guarantee"}})
+			return emit(g, portal.Object{"source": source, "data": archive.Scrub(v), "limitations": []string{"Source-observed private contract; no snapshot or completeness guarantee"}})
 		}}
 		if action == "import" {
 			cmd.Flags().String("input-file", "", "CSV/XLSX file for server-side parsing; does not save a campaign")

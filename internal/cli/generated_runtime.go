@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -115,7 +114,7 @@ func newGeneratedMethodCmd(g *globalFlags, r GenResource, m GenMethod) *cobra.Co
 				if p.FlagJSON != "" && cmd.Flags().Changed(p.FlagJSON) {
 					s, _ := cmd.Flags().GetString(p.FlagJSON)
 					var v any
-					if err := json.Unmarshal([]byte(s), &v); err != nil {
+					if err := decodeParamsJSON([]byte(s), &v); err != nil {
 						return exitf(2, "Invalid JSON for --%s: %v", p.FlagJSON, err)
 					}
 					params[p.Name] = v

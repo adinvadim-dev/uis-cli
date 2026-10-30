@@ -22,9 +22,13 @@ import (
 type Error struct {
 	Code            int
 	Stage, TicketID string
+	CampaignID      string
 }
 
 func (e *Error) Error() string {
+	if e.CampaignID != "" {
+		return fmt.Sprintf("private operation failed at %s (campaign_id=%s)", e.Stage, e.CampaignID)
+	}
 	return fmt.Sprintf("private operation failed at %s (ticket_id=%s)", e.Stage, e.TicketID)
 }
 

@@ -10,13 +10,15 @@ import (
 )
 
 // AutodialRequest is an allowlisted, source-observed supervisor operation.
-// Campaign writes remain plans until a safe non-starting lifecycle is proven.
+// Writes require caller confirmation and verify the resulting provider state.
 type AutodialRequest struct {
-	Method string     `json:"method"`
-	Path   string     `json:"path"`
-	Query  url.Values `json:"query,omitempty"`
-	Body   Object     `json:"-"`
-	Write  bool       `json:"mutation"`
+	Method    string     `json:"method"`
+	Path      string     `json:"path"`
+	Query     url.Values `json:"query,omitempty"`
+	Body      Object     `json:"-"`
+	Write     bool       `json:"mutation"`
+	RPCMethod string     `json:"rpc_method,omitempty"`
+	Surface   string     `json:"-"`
 }
 
 func AutodialPlan(action, id string, payload Object) (AutodialRequest, error) {
@@ -33,6 +35,29 @@ func AutodialPlan(action, id string, payload Object) (AutodialRequest, error) {
 		r.Path = "/auto_call/campaign/call_stat"
 	case "subscribers":
 		r.Path = "/auto_call/campaign/subscriber_stat"
+	case "media":
+		r.Method = "POST"
+		r.Path = "/v2.0"
+		r.RPCMethod = "get.media_files"
+	case "schedules":
+		r.Method = "POST"
+		r.Path = "/v2.0"
+		r.RPCMethod = "get.schedules"
+	case "timezone":
+		r.Method = "POST"
+		r.Path = "/v2.0"
+		r.RPCMethod = "get.account"
+	case "caller-lists":
+		r.Path = "/pbx/virtual_phone_list"
+		r.Surface = "private.comagic"
+	case "caller-rules":
+		r.Path = "/available_number_capacity_usage_rule_list"
+	case "caller-numbers":
+		r.Path = "/number_capacity"
+	case "caller-groups":
+		r.Path = "/number_capacity_group"
+	case "scenarios":
+		r.Path = "/scenario"
 	case "employees":
 		r.Path = "/auto_call/employees_in_groups"
 	case "stop-list":
@@ -59,8 +84,14 @@ func AutodialPlan(action, id string, payload Object) (AutodialRequest, error) {
 		r.Path = "/auto_call/campaign"
 		r.Write = true
 	case "status":
-		r.Method = "PATCH"
-		r.Path = "/auto_call/campaign"
+		r.Method = "POST"
+		r.Path = "/v2.0"
+		r.RPCMethod = "set.auto_call_campaign_status"
+		r.Write = true
+	case "clear":
+		r.Method = "POST"
+		r.Path = "/v2.0"
+		r.RPCMethod = "delete.auto_call_campaign_phone_numbers"
 		r.Write = true
 	case "exclude", "include":
 		r.Method = "POST"
@@ -79,7 +110,7 @@ func AutodialPlan(action, id string, payload Object) (AutodialRequest, error) {
 		return r, &Error{Code: 7, Stage: "autodial_contract_unavailable"}
 	}
 	switch action {
-	case "get", "calls", "subscribers", "update", "status":
+	case "get", "calls", "subscribers", "update", "status", "clear":
 		if !validCampaignID(id) {
 			return r, &Error{Code: 2, Stage: "autodial_campaign_id"}
 		}
@@ -104,6 +135,56 @@ func (c *Client) Autodial(ctx context.Context, action, id string, payload Object
 	r, e := AutodialPlan(action, id, payload)
 	if e != nil {
 		return nil, e
+	}
+	if action == "status" || action == "clear" {
+		return c.changeAutodialCampaign(ctx, action, id, payload)
+	}
+	if r.RPCMethod != "" {
+		if action == "timezone" {
+			loc, e := c.AutodialTimezone(ctx)
+			if e != nil {
+				return nil, e
+			}
+			return Object{"timezone": loc.String()}, nil
+		}
+		params := Object{"fields": []string{"id", "name"}}
+		if action == "media" {
+			params["limit"], params["offset"] = 100, 0
+			params["filter"] = Object{"field": "type", "operator": "=", "value": "user"}
+		}
+		for k, v := range payload {
+			switch k {
+			case "fields", "limit", "offset", "sort", "filter":
+				params[k] = v
+			default:
+				return nil, &Error{Code: 2, Stage: "autodial_catalog_parameter"}
+			}
+		}
+		out, e := c.cabinetRead(ctx, true, Object{"jsonrpc": "2.0", "id": "uis-autodial-catalog", "method": r.RPCMethod, "params": params})
+		if e != nil {
+			return nil, e
+		}
+		result, ok := out["result"].(map[string]interface{})
+		if !ok || out["id"] != "uis-autodial-catalog" {
+			return nil, &Error{Code: 7, Stage: "autodial_catalog_schema"}
+		}
+		if _, ok := result["data"].([]interface{}); !ok {
+			return nil, &Error{Code: 7, Stage: "autodial_catalog_schema"}
+		}
+		return result, nil
+	}
+	if action == "caller-lists" {
+		v, e := c.request(ctx, "GET", r.Path, nil, nil, "", false)
+		if e != nil {
+			return nil, e
+		}
+		if _, ok := v.([]interface{}); !ok {
+			return nil, &Error{Code: 7, Stage: "autodial_caller_lists_schema"}
+		}
+		return v, nil
+	}
+	if action == "create" || action == "update" {
+		return c.mutateAutodialCampaign(ctx, action, id, payload)
 	}
 	if r.Write && action != "exclude" && action != "include" {
 		return nil, &Error{Code: 7, Stage: "autodial_write_contract_unverified"}
@@ -223,7 +304,7 @@ func (c *Client) Autodial(ctx context.Context, action, id string, payload Object
 	// page, wrong campaign, or differently shaped payload is contract drift.
 	shapeOK := false
 	switch action {
-	case "list", "statuses", "employees", "stop-list", "export":
+	case "list", "statuses", "employees", "stop-list", "export", "caller-rules", "caller-numbers", "caller-groups", "scenarios":
 		_, shapeOK = v.([]interface{})
 	case "get":
 		o, ok := v.(map[string]interface{})

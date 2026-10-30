@@ -97,7 +97,7 @@ func TestAutodialFailsClosed(t *testing.T) {
 		s.Close()
 	}
 	c := New(Session{}, time.Second)
-	for _, a := range []string{"create", "update", "status", "listen"} {
+	for _, a := range []string{"listen"} {
 		_, e := c.Autodial(context.Background(), a, "123", Object{"numa": "70000000000"})
 		var pe *Error
 		if !errors.As(e, &pe) || pe.Code != 7 {

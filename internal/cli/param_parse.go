@@ -1,7 +1,10 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
 	"strconv"
 	"strings"
 )
@@ -36,7 +39,7 @@ func parseHumanFlagValue(p GenParam, s string) (any, error) {
 		// Allow JSON array in the plain flag for convenience.
 		if strings.HasPrefix(s, "[") {
 			var v any
-			if err := json.Unmarshal([]byte(s), &v); err != nil {
+			if err := decodeParamsJSON([]byte(s), &v); err != nil {
 				return nil, err
 			}
 			return v, nil
@@ -59,7 +62,7 @@ func parseHumanFlagValue(p GenParam, s string) (any, error) {
 		// Allow JSON object in the plain flag for convenience.
 		if strings.HasPrefix(s, "{") {
 			var v any
-			if err := json.Unmarshal([]byte(s), &v); err != nil {
+			if err := decodeParamsJSON([]byte(s), &v); err != nil {
 				return nil, err
 			}
 			return v, nil
@@ -75,4 +78,17 @@ func errNeedsJSON(p GenParam) error {
 		return exitf(2, "Param %q expects %s; use --%s", p.Name, p.Type, p.FlagJSON)
 	}
 	return exitf(2, "Param %q expects %s; use the -json variant", p.Name, p.Type)
+}
+
+// Keep provider IDs exact across every JSON parameter entry point.
+func decodeParamsJSON(b []byte, v any) error {
+	d := json.NewDecoder(bytes.NewReader(b))
+	d.UseNumber()
+	if e := d.Decode(v); e != nil {
+		return e
+	}
+	if d.Decode(new(any)) != io.EOF {
+		return fmt.Errorf("expected exactly one JSON value")
+	}
+	return nil
 }
