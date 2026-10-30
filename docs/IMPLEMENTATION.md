@@ -26,6 +26,8 @@ The authorized fallback archive uses local SQLite / FTS4 (CGO), staying on Go 1.
 
 Opt-in [production E2E](PRODUCTION_E2E.md) exercises fresh captcha-backed login and read compatibility. A separately authorized support-write scenario uses one clearly marked test ticket, verifies messages and status through live reads, and closes it at the end. Writes still require explicit opt-in and account fixtures; arbitrary generated mutations are not part of the suite. Live infopin stores `waiting_operator` after creation/reopening; reopen reconciliation accepts that stored state as well as `created`, without replaying the PUT after an uncertain response.
 
+Private login and call-search compatibility were also verified live for this change; see the extension below.
+
 ## Review corrections
 
 The implementation review caught and corrected default-profile fallthrough to a legacy token, logout crossing authentication surfaces, live search ignoring its positional query, writable archive initialization during live reads, and incomplete redaction of typed comment slices, nested parameter arrays and recording locators. Focused regression tests retain these contracts. Structured RPC error groups follow [UIS error handling](https://www.uiscom.ru/academiya/spravochnyj-centr/dokumentatsiya-api/data_api/): explicit auth/permission/quota/validation/unavailable rejections are distinct from unresolved writes.
@@ -33,3 +35,7 @@ The implementation review caught and corrected default-profile fallthrough to a 
 Employee search uses `employees` / `jsquery` (`#.employee_id = ID`) per the provider array schema; legs keep their separate `employee_id` predicate. Local FTS search applies the requested page offset. Reopen checks known closure dates against the 14-day UI rule before dispatch; unknown dates remain subject to server validation.
 
 Annotation commands resolve the selected session through `get.calls_report` and use its verified `communication_id` for the send-once write. Missing identity fails closed; dry-run describes the preflight without network. Config edits preserve unrequested on-disk credentials rather than persisting effective environment/profile credentials. Local search applies status before pagination.
+
+## Private call search (2026-10-30)
+
+Typed report-constructor adapter and read-allowlisted cabinet RPC discovery use the separate auth.jwt captured during private login. Search dates, filters, sorting and offsets are sent server-side; numbers retain precision and page schema/identity are checked. Existing Data API commands and explicit --source dataapi remain compatible. Private errors do not trigger key-based fallback or login. Private employee/scenario names are supported; numeric ID filtering is intentionally unavailable until its wire contract is observed. No standalone quick-search endpoint, snapshot consistency, timezone or retention claim is made. The live matrix and remaining evidence limits are in [05-private-call-search-live.md](research/05-private-call-search-live.md).

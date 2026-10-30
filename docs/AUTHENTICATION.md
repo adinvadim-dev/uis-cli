@@ -105,3 +105,7 @@ Before any private mutation:
 ## Redaction
 
 Logs and `--verbose` must redact: tokens, cookies, CSRF, `smart-token`, passwords, credential-process stdout, authorization headers, raw support message bodies in crash dumps unless explicitly writing to a user-requested file.
+
+## Cabinet report JWT
+
+Private login also visits the go cabinet with the staged cookie jar and extracts the JSON `auth.jwt` cookie into `cabinet_token`. This third credential is distinct from app/infopin tokens. Private report-constructor and cabinet RPC reads send Authorization Bearer, X-Auth-Token and X-Auth-Type jwt; they never require or resolve dataapi.access_token. Legacy sessions remain readable for support/details; refresh private auth to enable report search. `auth status` shows cabinet_session_present, never the credential. Capture is optional for support-only login compatibility; search fails with auth error when missing. Credential binding remains the existing login + authenticated-support-read policy, not a dedicated provider principal assertion.

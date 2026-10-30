@@ -57,6 +57,9 @@ func TestPrivateLoginRefreshAndReads(t *testing.T) {
 			}
 			http.SetCookie(w, &http.Cookie{Name: "sso", Value: "fixture-sso", Path: "/"})
 			http.Redirect(w, r, "https://app.uiscom.ru/sso/callback", 302)
+		case "go.uiscom.ru/":
+			http.SetCookie(w, &http.Cookie{Name: "auth", Value: url.QueryEscape(`{"jwt":"fixture-cabinet"}`), Domain: ".uiscom.ru", Path: "/"})
+			fmt.Fprint(w, "ok")
 		case "app.uiscom.ru/sso/callback":
 			http.SetCookie(w, &http.Cookie{Name: "access_token", Value: "fixture-app", Path: "/"})
 			fmt.Fprint(w, "ok")
@@ -147,7 +150,7 @@ func TestPrivateLoginRefreshAndReads(t *testing.T) {
 		t.Fatal(err)
 	}
 	s, err := portal.LoadSession(profile.State("fixture"))
-	if err != nil || s.Login != "fixture@example.invalid" || s.AppToken != "fixture-app" || s.GoToken != "fixture-go" {
+	if err != nil || s.Login != "fixture@example.invalid" || s.CabinetToken != "fixture-cabinet" || s.AppToken != "fixture-app" || s.GoToken != "fixture-go" {
 		t.Fatal("promoted session invalid")
 	}
 	if out, e := run("calls", "show", "123"); e != nil || !strings.Contains(out, "private.call_details_data") {

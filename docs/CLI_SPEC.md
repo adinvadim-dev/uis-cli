@@ -153,7 +153,7 @@ Never fabricate ticket IDs (ignore cabinet `Date.now()` fallback). Require provi
 
 | Command | Behavior | Network |
 | --- | --- | --- |
-| `calls search` | Quick search: `--id`, `--phone`, `--from`, `--till`, `--direction`, `--lost`, `--transfer`, `--employee-id`, `--virtual-number`, `--scenario-id`, `--limit`, `--offset`, `--filter-json`. Uses Data API `get.calls_report` (and documented `get.calls` when entitlement probe succeeds). | Live |
+| `calls search` | Quick search: `--id`, `--phone`, `--from`, `--till`, `--direction`, `--lost`, `--transfer`, `--employee-id`, `--virtual-number`, `--scenario-id`, `--limit`, `--offset`, `--filter-json`. Defaults to bound private cabinet report; `--source dataapi` retains `get.calls_report`. `--source private` requires cabinet JWT. Private `--employee` / `--scenario` use catalog names; numeric ID flags require Data API. `--sort call_start_date_time|communication_id --order asc|desc` are private-only. | Live |
 | `calls show <session-id>` | Private `call_details_data` when private session available; else reduced Data API fallback with explicit `source` provenance. `--date-hint` optional. | Live |
 | `calls legs <session-id>` | `get.call_legs_report` filtered by `call_session_id` within date window. | Live |
 | `calls comment <session-id>` | `create.communication_comment` once; confirm text. | Live mutation |
@@ -220,3 +220,7 @@ uis --json call get.calls_report --params-json '{"date_from":"...","date_till":"
 - Saved-filter create/delete; report-state writes; export/scheduled-export/Google Sheets
 - Call API originate/transfer control plane
 - Public `create.tech_support_ticket` as general support path
+
+## Private call search extension (2026-10-30)
+
+Search and filters/reports discovery accept `--source auto|private|dataapi`. Auto selects an existing bound private session; private auth/provider/schema errors never silently fall back. Search source is `private.report_constructor`; discovery source is `private.cabinet_rpc` (RPC host with cabinet JWT, no API key). Private filter-json uses the catalog's cabinet schema. Empty search is success, possibly with unknown total. A page is bounded and has no snapshot guarantee. Dry-run never reads sessions: explicit private describes its private query; auto retains the legacy Data API-compatible plan without resolving its runtime source. See [live findings](research/05-private-call-search-live.md) and README for values, paging and identity limits.

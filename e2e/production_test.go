@@ -86,19 +86,19 @@ func TestProduction(t *testing.T) {
 		h.json(t, 0, "account", "get")
 		h.json(t, 0, "call", "get.account")
 	})
-	for _, args := range [][]string{{"reports", "list"}, {"filters", "list", "--report-type", "calls"}, {"filters", "show", "--report-type", "calls"}, {"filters", "rapid", "--report-type", "calls"}} {
+	for _, args := range [][]string{{"reports", "list", "--source", "dataapi"}, {"filters", "list", "--source", "dataapi", "--report-type", "calls"}, {"filters", "show", "--source", "dataapi", "--report-type", "calls"}, {"filters", "rapid", "--source", "dataapi", "--report-type", "calls"}} {
 		t.Run("live/"+strings.Join(args[:2], "-"), func(t *testing.T) { h.json(t, 0, args...) })
 	}
 	from := time.Now().AddDate(0, 0, -7).Format("2006-01-02 15:04:05")
 	till := time.Now().Format("2006-01-02 15:04:05")
 	window := []string{"--from", from, "--till", till}
 	t.Run("live/calls", func(t *testing.T) {
-		rows := mustRows(t, h.json(t, 0, append([]string{"calls", "search", "--limit", "1"}, window...)...))
+		rows := mustRows(t, h.json(t, 0, append([]string{"calls", "search", "--source", "dataapi", "--limit", "1"}, window...)...))
 		if len(rows) == 0 {
 			t.Fatal("no recent call fixture; populate account or extend the test window")
 		}
 		id := mustID(t, rows[0])
-		filtered := mustRows(t, h.json(t, 0, append([]string{"calls", "search", "--id", id, "--limit", "1"}, window...)...))
+		filtered := mustRows(t, h.json(t, 0, append([]string{"calls", "search", "--source", "dataapi", "--id", id, "--limit", "1"}, window...)...))
 		if len(filtered) != 1 || mustID(t, filtered[0]) != id {
 			t.Fatal("call ID filter did not return the selected call")
 		}
@@ -108,7 +108,7 @@ func TestProduction(t *testing.T) {
 		}
 		mustRows(t, h.json(t, 0, append([]string{"calls", "legs", id}, window...)...))
 		for _, flag := range []string{"--lost", "--transfer"} {
-			mustRows(t, h.json(t, 0, append([]string{"calls", "search", "--limit", "1", flag}, window...)...))
+			mustRows(t, h.json(t, 0, append([]string{"calls", "search", "--source", "dataapi", "--limit", "1", flag}, window...)...))
 		}
 	})
 	for _, kind := range []string{"topic", "contact"} {

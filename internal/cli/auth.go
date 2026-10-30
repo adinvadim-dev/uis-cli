@@ -32,7 +32,7 @@ func newAuthCmd(g *globalFlags) *cobra.Command {
 			switch action {
 			case "status":
 				s, e := portal.LoadSession(profile.State(name))
-				return emit(g, map[string]interface{}{"account": name, "session_present": e == nil, "principal": s.Login, "updated_at": s.UpdatedAt, "credential_process_configured": len(a.CredentialProcess.Command) > 0, "dataapi_env_present": os.Getenv("UIS_TOKEN") != "", "private_login": "credential_binding_and_authenticated_read"})
+				return emit(g, map[string]interface{}{"account": name, "session_present": e == nil, "cabinet_session_present": s.CabinetToken != "", "principal": s.Login, "updated_at": s.UpdatedAt, "credential_process_configured": len(a.CredentialProcess.Command) > 0, "dataapi_env_present": os.Getenv("UIS_TOKEN") != "", "private_login": "credential_binding_and_authenticated_read"})
 			case "logout":
 				if e = confirm(g, map[string]interface{}{"logout": name}); e != nil {
 					return e

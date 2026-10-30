@@ -30,11 +30,12 @@ func (e *Error) Error() string {
 
 type Object = map[string]interface{}
 type Session struct {
-	AppToken   string    `json:"app_token"`
-	GoToken    string    `json:"go_token"`
-	Login      string    `json:"login"`
-	CustomerID string    `json:"customer_id"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	CabinetToken string    `json:"cabinet_token,omitempty"`
+	AppToken     string    `json:"app_token"`
+	GoToken      string    `json:"go_token"`
+	Login        string    `json:"login"`
+	CustomerID   string    `json:"customer_id"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 func LoadSession(dir string) (Session, error) {
@@ -84,14 +85,15 @@ func Promote(dir string, s Session, expected string, verify func(Session) (strin
 }
 
 type Client struct {
-	BaseURL, AppURL string
-	HTTP            *http.Client
-	Session         Session
-	Verify          func(context.Context, Session) error
+	BaseURL, AppURL   string
+	ReportURL, RPCURL string
+	HTTP              *http.Client
+	Session           Session
+	Verify            func(context.Context, Session) error
 }
 
 func New(s Session, timeout time.Duration) *Client {
-	return &Client{BaseURL: "https://uis-prod-msk-comagic-api.uiscom.ru", AppURL: "https://app.uiscom.ru", Session: s, HTTP: &http.Client{Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
+	return &Client{ReportURL: "https://uis-prod-msk-report-constructor-api.uiscom.ru", RPCURL: "https://dataapi.uiscom.ru", BaseURL: "https://uis-prod-msk-comagic-api.uiscom.ru", AppURL: "https://app.uiscom.ru", Session: s, HTTP: &http.Client{Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 }
 func ID(o Object) string {
 	switch v := o["id"].(type) {
