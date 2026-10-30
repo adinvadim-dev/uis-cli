@@ -114,6 +114,12 @@ func TestProduction(t *testing.T) {
 	for _, kind := range []string{"topic", "contact"} {
 		t.Run("live/support-"+kind, func(t *testing.T) { mustRows(t, h.json(t, 0, "support", kind, "list")) })
 	}
+	t.Run("live/support-write", func(t *testing.T) {
+		if os.Getenv("UIS_E2E_SUPPORT_WRITE") != "1" {
+			t.Skip("live support writes NOT tested; set UIS_E2E_SUPPORT_WRITE=1 with explicit fixture IDs and a new journal")
+		}
+		h.supportLifecycle(t, account)
+	})
 	t.Run("live/support-archive", func(t *testing.T) {
 		live := object(t, h.json(t, 0, "support", "ticket", "list", "--live", "--limit", "1"))
 		rows := mustRows(t, live["data"])
@@ -264,7 +270,20 @@ func (h harness) text(t *testing.T, args ...string) string {
 	return string(raw)
 }
 
-func (h harness) json(t *testing.T, want int, args ...string) any {
+type cliResult struct {
+	Schema  string `json:"schemaVersion"`
+	OK      bool   `json:"ok"`
+	Command string `json:"command"`
+	Data    any    `json:"data"`
+	Error   struct {
+		Code    string `json:"code"`
+		Details struct {
+			TicketID string `json:"ticket_id"`
+		} `json:"details"`
+	} `json:"error"`
+}
+
+func (h harness) execute(t *testing.T, args ...string) (cliResult, int) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
@@ -281,15 +300,7 @@ func (h harness) json(t *testing.T, want int, args ...string) any {
 		}
 		code = exit.ExitCode()
 	}
-	var envelope struct {
-		Schema  string `json:"schemaVersion"`
-		OK      bool   `json:"ok"`
-		Command string `json:"command"`
-		Data    any    `json:"data"`
-		Error   struct {
-			Code string `json:"code"`
-		} `json:"error"`
-	}
+	var envelope cliResult
 	dec := json.NewDecoder(&stdout)
 	dec.UseNumber()
 	if dec.Decode(&envelope) != nil {
@@ -299,6 +310,12 @@ func (h harness) json(t *testing.T, want int, args ...string) any {
 	if dec.Decode(&extra) != io.EOF || envelope.Schema != "uis.cli/v1" || envelope.Command == "" || envelope.OK != (code == 0) {
 		t.Fatal("invalid CLI envelope contract (output suppressed)")
 	}
+	return envelope, code
+}
+
+func (h harness) json(t *testing.T, want int, args ...string) any {
+	t.Helper()
+	envelope, code := h.execute(t, args...)
 	if code != want {
 		t.Fatalf("CLI exit=%d, expected=%d, error=%s (output suppressed)", code, want, envelope.Error.Code)
 	}
