@@ -30,11 +30,12 @@ func (e *Error) Error() string {
 
 type Object = map[string]interface{}
 type Session struct {
-	AppToken   string    `json:"app_token"`
-	GoToken    string    `json:"go_token"`
-	Login      string    `json:"login"`
-	CustomerID string    `json:"customer_id"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	CabinetToken string    `json:"cabinet_token,omitempty"`
+	AppToken     string    `json:"app_token"`
+	GoToken      string    `json:"go_token"`
+	Login        string    `json:"login"`
+	CustomerID   string    `json:"customer_id"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 func LoadSession(dir string) (Session, error) {
@@ -84,14 +85,15 @@ func Promote(dir string, s Session, expected string, verify func(Session) (strin
 }
 
 type Client struct {
-	BaseURL, AppURL string
-	HTTP            *http.Client
-	Session         Session
-	Verify          func(context.Context, Session) error
+	BaseURL, AppURL   string
+	ReportURL, RPCURL string
+	HTTP              *http.Client
+	Session           Session
+	Verify            func(context.Context, Session) error
 }
 
 func New(s Session, timeout time.Duration) *Client {
-	return &Client{BaseURL: "https://uis-prod-msk-comagic-api.uiscom.ru", AppURL: "https://app.uiscom.ru", Session: s, HTTP: &http.Client{Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
+	return &Client{ReportURL: "https://uis-prod-msk-report-constructor-api.uiscom.ru", RPCURL: "https://dataapi.uiscom.ru", BaseURL: "https://uis-prod-msk-comagic-api.uiscom.ru", AppURL: "https://app.uiscom.ru", Session: s, HTTP: &http.Client{Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 }
 func ID(o Object) string {
 	switch v := o["id"].(type) {
@@ -224,6 +226,7 @@ func (c *Client) Ticket(ctx context.Context, id string) (Object, error) {
 	}
 	return nil, &Error{Code: 5, Stage: "ticket"}
 }
+
 // Comments loads the full thread for a ticket. Live infopin rejects
 // sort/order/offset/limit on this resource (HTTP 500). The full set is
 // returned on offset 0; later offsets are empty so archive sync terminates
@@ -259,6 +262,7 @@ func (c *Client) Tickets(ctx context.Context, offset, limit int) ([]Object, erro
 	}
 	return Rows(v)
 }
+
 // validateAttachments checks every path is readable and ≤10 MiB before any
 // provider write. Create must call this before the ticket POST so a local
 // attachment failure cannot leave an orphan ticket.
@@ -312,6 +316,7 @@ func multipartBody(fields Object, files []string) (*bytes.Buffer, string, error)
 	e = w.Close()
 	return &b, w.FormDataContentType(), e
 }
+
 // ProbeAuthenticatedRead proves the Go session can still perform an
 // authenticated support metadata read. Write preflight uses this (or an
 // injected Verify) before dispatch. It is credential-binding + live read

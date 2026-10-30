@@ -59,7 +59,7 @@ func LoginAndPromote(ctx context.Context, dir, expected, customer, login, passwo
 	if err != nil {
 		return err
 	}
-	s := Session{AppToken: app, GoToken: goToken}
+	s := Session{AppToken: app, GoToken: goToken, CabinetToken: l.cabinetJWT(ctx)}
 	return Promote(dir, s, NormalizeLogin(expected), func(s Session) (string, error) {
 		c := New(s, timeout)
 		v, err := c.Read(ctx, "tech-support-web-type", nil)
@@ -224,6 +224,39 @@ func (l *loginFlow) token(origin string) string {
 		if c.Name == "access_token" && c.Value != "" && c.Value != `""` {
 			return c.Value
 		}
+	}
+	return ""
+}
+
+// The new cabinet stores a third credential in the domain auth cookie. It is
+// optional for legacy support-only sessions; call search requires it explicitly.
+func (l *loginFlow) cabinetJWT(ctx context.Context) string {
+	next := "https://go.uiscom.ru/"
+	for i := 0; i < 8; i++ {
+		_, loc, err := l.request(ctx, "GET", next, nil)
+		if err != nil {
+			return ""
+		}
+		u, _ := url.Parse("https://go.uiscom.ru/")
+		for _, c := range l.http.Jar.Cookies(u) {
+			if c.Name != "auth" {
+				continue
+			}
+			raw, err := url.QueryUnescape(c.Value)
+			if err != nil {
+				continue
+			}
+			var auth struct {
+				JWT string `json:"jwt"`
+			}
+			if json.Unmarshal([]byte(raw), &auth) == nil && auth.JWT != "" {
+				return auth.JWT
+			}
+		}
+		if loc == "" {
+			break
+		}
+		next = loc
 	}
 	return ""
 }

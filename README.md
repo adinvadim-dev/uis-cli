@@ -45,7 +45,20 @@ uis --dry-run calls comment 123 --body 'Reviewed'
 uis --force calls tag 123 --add 456
 ```
 
-Search combines typed flags and an optional `--filter-json` object with AND. Dates default to the last 90 days. Details prefer an existing bound app session; fallback uses `get.calls_report`, verifies the requested ID, and marks `source`, `reduced`, and `fallback_reason`. A missing call returns exit 5. Call details never start login or request recognition. Recording/download URLs are stripped from output.
+Search defaults to `--source auto`: an existing bound private session selects the cabinet report; otherwise the existing Data API path remains available. Use `--source private` for token-free cabinet search and `--source dataapi` for the original `get.calls_report` contract. An unavailable/expired private report session fails explicitly; refresh with `auth refresh --surface private --no-input`. Login captures separate app, support and cabinet JWT credentials. No Data API key is needed for private search or discovery.
+
+```sh
+uis --json calls search --source private --id 123 --from '2026-10-29 00:00:00' --till '2026-10-30 00:00:00'
+uis --json calls search --source private --direction in --lost --transfer=false --limit 25 --offset 25
+uis filters list --source private --report-type calls
+uis calls search --source private --employee 'Exact cabinet name' --scenario 'Exact cabinet scenario'
+uis calls search --source dataapi --employee-id 123
+```
+
+Private search combines flags and `--filter-json` with AND. It returns `source`, rows, date window, limit/offset and metadata; `total_items: null` means UIS omitted the count for an empty result. Private enum cells retain cabinet objects/values. ID means cabinet `communication_id`; employee/scenario names come from `filters list`, while their numeric ID flags require Data API. Phone matching is exact and strings are sent literally. Private sort supports `--sort call_start_date_time|communication_id --order asc|desc`. Raw private filters use cabinet fields/operators/values, which differ from Data API. Dates default to the last 90 days; they are literal cabinet wall time, with no verified timezone/retention guarantee. Offset pages have no snapshot/completeness guarantee.
+
+Details prefer an existing bound app session; fallback uses `get.calls_report`, verifies the requested session ID, and marks `source`, `reduced`, and `fallback_reason`. A missing call returns exit 5. Call details never start login or request recognition. Recording/download URLs are stripped from output.
+
 
 ## Support and offline archive
 

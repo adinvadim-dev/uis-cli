@@ -1,0 +1,1 @@
+Search calls and discover report filters using the cabinet session without a Data API access key. Add explicit private/Data API source selection, cabinet JWT capture, date/sort/offset pages and source-labelled results. Private employee/scenario filters use names from the cabinet catalog; ID flags remain available with the Data API source.

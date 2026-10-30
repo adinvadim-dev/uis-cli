@@ -193,6 +193,7 @@ func emit(g *globalFlags, v interface{}) error {
 	}
 	return writeResult(g, b)
 }
+
 // pageObjects applies optional status/query filters and limit/page locally.
 // Used for live support lists because provider offset/limit/status query params 500.
 func pageObjects(rows []portal.Object, status, query string, limit, page int) []portal.Object {
@@ -403,6 +404,21 @@ func newCalls(g *globalFlags) *cobra.Command {
 			if action == "comment" || action == "tag" {
 				return annotateCall(g, method, p, args[0], from, till)
 			}
+			if action == "search" {
+				source, err := callSource(cmd)
+				if err != nil {
+					return err
+				}
+				handled, err := runPrivateSearch(g, cmd, source, from, till, limit, offset)
+				if handled {
+					return err
+				}
+				for _, flag := range []string{"employee", "scenario", "sort", "order"} {
+					if cmd.Flags().Changed(flag) {
+						return exitf(2, "--%s requires private source", flag)
+					}
+				}
+			}
 			if action == "show" && !g.DryRun {
 				reason := "private_session_unavailable"
 				pc, e := privateClient(g)
@@ -442,6 +458,13 @@ func newCalls(g *globalFlags) *cobra.Command {
 			}
 			return runRPC(g, method, p)
 		}}
+		if action == "search" {
+			c.Flags().String("source", "auto", "Read source: auto, private, dataapi")
+			c.Flags().String("employee", "", "Cabinet employee name (private)")
+			c.Flags().String("scenario", "", "Cabinet scenario name (private)")
+			c.Flags().String("sort", "call_start_date_time", "Private sort: call_start_date_time or communication_id")
+			c.Flags().String("order", "desc", "Private sort order: asc or desc")
+		}
 		if action != "search" {
 			c.Use += " <session-id>"
 			c.Args = cobra.ExactArgs(1)
@@ -718,8 +741,29 @@ func newDiscovery(g *globalFlags, use string, methods map[string]string) *cobra.
 			if t != "" {
 				p["report_type"] = t
 			}
+			source, err := callSource(cmd)
+			if err != nil {
+				return err
+			}
+			if source != "dataapi" {
+				if g.DryRun {
+					return emit(g, portal.Object{"source": source, "method": method, "params": p, "network": false})
+				}
+				pc, err := selectCallClient(g, source)
+				if err != nil {
+					return err
+				}
+				if pc != nil {
+					v, err := pc.DiscoverCalls(cmd.Context(), method, t)
+					if err != nil {
+						return operationError(err)
+					}
+					return emit(g, portal.Object{"source": "private.cabinet_rpc", "data": archive.Scrub(v)})
+				}
+			}
 			return runRPC(g, method, p)
 		}}
+		c.Flags().String("source", "auto", "Read source: auto, private, dataapi")
 		c.Flags().String("report-type", "", "Report type")
 		r.AddCommand(c)
 	}
