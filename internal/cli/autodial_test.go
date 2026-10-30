@@ -55,3 +55,22 @@ func TestAutodialPayloadValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestAutodialImportDryRunDoesNotReadFileOrSession(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("UIS_CONFIG", filepath.Join(dir, "missing.toml"))
+	t.Setenv("XDG_STATE_HOME", filepath.Join(dir, "missing-state"))
+	out := capture(t, func() {
+		r := newRootCmd()
+		r.SetArgs([]string{"--json", "--dry-run", "autodial", "import", "--input-file", "/must-not-read.csv"})
+		if e := r.Execute(); e != nil {
+			t.Fatal(e)
+		}
+	})
+	if strings.Contains(out, "must-not-read.csv") || !strings.Contains(out, `"path":"/auto_call/campaign/import_numbers"`) {
+		t.Fatal("unsafe import plan")
+	}
+	if _, e := os.Stat(filepath.Join(dir, "missing-state")); !os.IsNotExist(e) {
+		t.Fatal("dry-run touched session state")
+	}
+}

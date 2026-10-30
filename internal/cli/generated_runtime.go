@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"uis-cli/internal/portal"
 )
 
 type GenParam struct {
@@ -149,10 +150,18 @@ func newGeneratedMethodCmd(g *globalFlags, r GenResource, m GenMethod) *cobra.Co
 				}
 			}
 
+			if portal.IsAutodialRPC(m.Method) {
+				if handled, e := runAutodialRPC(g, cmd, m.Method, params); handled {
+					return e
+				}
+			}
 			return runRPC(g, m.Method, params)
 		},
 	}
 
+	if portal.IsAutodialRPC(m.Method) {
+		c.Flags().String("source", "auto", "Outgoing campaign authentication: auto, private or dataapi")
+	}
 	// Advanced/escape-hatch params injection.
 	c.Flags().StringArrayVar(&paramKVs, "param", nil, "Advanced: param key=value or key:=<json> (repeatable)")
 	c.Flags().StringVar(&paramsJSON, "params-json", "", "Advanced: params as a JSON object string")

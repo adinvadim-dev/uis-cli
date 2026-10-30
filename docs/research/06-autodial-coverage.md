@@ -6,10 +6,10 @@ Private source: supervisor-workplace frontend build 2026-10-19T12:32:02.617Z, ch
 
 | Operation | Surface | Endpoint / method | CLI | Status |
 | --- | --- | --- | --- | --- |
-| List, contact outcomes | Data API | get.auto_call_campaigns | auto-call-campaigns list | implemented; key required, not verified live |
-| Add numbers | Data API | create.auto_call_campaign_phone_numbers | auto-call-campaign-phone-numbers create | dry-run-only validation; not dispatched live |
-| Remove numbers | Data API | delete.auto_call_campaign_phone_numbers | auto-call-campaign-phone-numbers delete | dry-run-only validation; final statuses cannot be deleted |
-| Set status, start/resume/pause/stop | Data API | set.auto_call_campaign_status | auto-call-campaign-status set | dry-run-only validation; in_process/planned may call immediately |
+| List, contact outcomes | Data API | get.auto_call_campaigns | auto-call-campaigns list | verified-live through cabinet JWT; auto/private need no API key |
+| Add numbers | Data API | create.auto_call_campaign_phone_numbers | auto-call-campaign-phone-numbers create | enabled via key or cabinet JWT; plans/confirmation tested, no live write |
+| Remove numbers | Data API | delete.auto_call_campaign_phone_numbers | auto-call-campaign-phone-numbers delete | enabled via key or cabinet JWT; plans/confirmation tested; final statuses cannot be deleted |
+| Set status, start/resume/pause/stop | Data API | set.auto_call_campaign_status | auto-call-campaign-status set | enabled via key or cabinet JWT; plans/confirmation tested; in_process/planned may call immediately |
 | List campaigns | private | POST /auto_call/campaign_list (read) | autodial list --payload-file | verified-live; bounded date window in payload, no completeness claim |
 | Get campaign / contacts / settings / schedule | private | GET /auto_call/campaign?campaign_id | autodial get ID | verified-live; settings returned together |
 | Allowed status transitions | private | GET /auto_call/campaign_status | autodial statuses | verified-live |
@@ -23,7 +23,7 @@ Private source: supervisor-workplace frontend build 2026-10-19T12:32:02.617Z, ch
 | Edit settings / phone_list / attempts / schedule | private | PUT /auto_call/campaign?campaign_id | autodial update ID --payload-file | dry-run-only; saving draft may set new_status=planned |
 | Start/resume/pause/stop | private | PATCH /auto_call/campaign?campaign_id | autodial status ID --payload-file | dry-run-only; consult statuses, never guess next_statuses |
 | Validate numbers | private | POST /auto_call/campaign/validate_numbers | autodial validate --payload-file | verified-live (empty list and invalid phone rejection); returns numbers, does not persist campaign |
-| CSV/XLSX import | private | POST /auto_call/campaign/import_numbers multipart file + old_numbers | autodial import | blocked: multipart parsing contract not verified; no guessed local XLSX conversion |
+| CSV/XLSX import | private | POST /auto_call/campaign/import_numbers multipart file + old_numbers | autodial import --input-file | implemented parse-only multipart; CSV live probe; XLSX bytes passed unchanged, format not live-verified |
 | Clear contacts | private | Replace phone_list via campaign PUT | autodial update ID --payload-file | dry-run-only; no atomic append/clear endpoint observed |
 | Delete/archive campaign | private | Not observed | autodial delete ID | blocked: no deletion/archival endpoint established; cancelled is not deletion |
 | IVR/scenarios/media | Data API | get.scenarios, get.media_files | scenarios list; media-files list | existing generated surface; campaign uses playlist/employee settings, not proven scenario_id |
@@ -34,7 +34,7 @@ Campaign settings observed: number_capacity_usage_rule/id/group_id, pure_ani_pho
 
 Live access: local auth status had no configured session/helper/key. Existing mini session was found through explicit SSH identity; initial supervisor status, exclusions and employee reads all returned HTTP 401 with exact body `401: Unauthorized`. No mutation or call was sent. Refresh and final probe results are recorded below when available. Provider bodies containing business data are never committed.
 
-Private writes fail closed even with --force until their principal/response and safe lifecycle contracts are established. Their dry-run plans record method/path/parameter names without customer content. Production campaign lifecycle E2E is blocked by the absence of a proven non-starting create plus delete/archive contract. Creating a resource that cannot be cleaned up would violate the test requirement.
+Private supervisor writes fail closed even with --force until their principal/response and safe lifecycle contracts are established. Their dry-run plans record method/path/parameter names without customer content. Production campaign lifecycle E2E is blocked by the absence of a proven non-starting create plus delete/archive contract. Creating a resource that cannot be cleaned up would violate the test requirement.
 
 Refresh result (mini, 2026-10-30): `auth refresh --surface private --no-input` exited 3 with code `authentication_required`, message `Credentials or private session required`. No repeated login/solver attempts were made. The local production probe is opt-in and was not represented as a successful live run.
 
@@ -48,8 +48,18 @@ The isolated opt-in `TestProductionAutodial` passed on mini for statuses, employ
 
 ## Repeatable command-level E2E
 
-`TestProductionAutodial` now exercises every private command plus all four official methods through generated and low-level routes. Private reads dispatch; private writes prove dry-run and forced refusal; unsupported import/delete prove capability-unavailable. Write checks have independently unusable credentials and sessions, protecting production even if a guard regresses. Official mutations prove dry-run and confirmation refusal, never forced dispatch. Official live listing reports missing Data API credentials explicitly, rather than treating a skipped request as provider success.
+`TestProductionAutodial` now exercises every private command plus all four official methods through generated and low-level routes. Private reads dispatch; supervisor writes prove dry-run and forced refusal; unsupported delete proves capability-unavailable. Import parses without saving a campaign. Write checks have independently unusable credentials and sessions, protecting production even if a guard regresses. Official mutations prove dry-run and confirmation refusal, never forced dispatch. Official live listing reports missing Data API credentials explicitly, rather than treating a skipped request as provider success.
 
 Export input follows the cabinet UI in `40784.eb87b0fb.js`: `SUBSCRIBER_STATUSES=["unsuccessfully_processed","not_processed"]`, returned columns `numa`, `campaign_name`, `status_name`. Passing every Data API contact status to this private export was rejected by the provider; the surfaces' status domains must not be conflated. Validation tests use an invalid string and require validation_error, rather than sending a callable number.
 
 Final expanded opt-in run on mini (2026-10-30): PASS, 21 subtests passed and one explicitly skipped (official live list: authentication_required, no Data API credential). All nine supervisor reads passed, including nonempty export rows with the cabinet's three string columns and rejection of a non-callable invalid number. Six private-write plan/force guards, two unavailable contracts and four official dual-route plan/confirmation tests passed. No writes or calls were dispatched. Local make build/check and production-tag compilation also passed; local opt-in execution was skipped by design.
+
+## Keyless outgoing RPC and file import
+
+The previous official live-list SKIP was an implementation gap, not an account-access blocker. Direct JWT-only get.auto_call_campaigns returned HTTP 200 with result.data and result.metadata. Both generated and low-level outgoing commands now accept auto/private/dataapi sources; auto selects the existing bound cabinet session and private uses JWT on the RPC host without an access_token parameter. Four production list variants (generated/raw × auto/private) must succeed with an unusable API-key helper and no UIS_TOKEN. Explicit dataapi keeps the key route. Other private RPC methods are not implied.
+
+The three outgoing mutations have working keyless RPC routing with existing confirmation, binding/authentication preflight and single-dispatch behavior. Their success acknowledgement and ambiguous-error semantics are protocol-tested; they were not sent to production. Successful list access does not prove write permission. Supervisor create/update/status/exclusions/listen plans remain distinct and gated; the RPC route provides add/remove-number and status operations without inventing supervisor replacement semantics.
+
+Import uses the frontend multipart fields file and old_numbers. It returns editor numbers and does not persist a campaign; the 10 MiB bound is a CLI bound, not a proven provider maximum. CSV is covered by the opt-in real-binary suite. XLSX bytes use the same server parsing route; XLSX format handling is not yet verified live. Delete/archive and a safe non-starting create/cleanup lifecycle remain unresolved.
+
+Latest keyless/import suite on mini: 22 PASS, zero SKIP. Ten supervisor read/parse commands passed (including CSV import without saving a campaign), and generated/raw RPC listing with auto/private passed with deliberately unavailable API-key credentials. Six supervisor write guards, unavailable delete and four official method plan/confirmation checks passed. Outgoing RPC mutations remain production-unverified; no campaign/number/status mutation or call was sent.

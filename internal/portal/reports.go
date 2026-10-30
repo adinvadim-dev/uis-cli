@@ -36,6 +36,10 @@ type CallPage struct {
 // cabinetRead only dispatches the two source-observed read protocols. POST here
 // is a read; redirects are never followed and failures never mean unknown writes.
 func (c *Client) cabinetRead(ctx context.Context, discovery bool, body interface{}) (Object, error) {
+	return c.cabinetRequest(ctx, discovery, body, false)
+}
+
+func (c *Client) cabinetRequest(ctx context.Context, discovery bool, body interface{}, write bool) (Object, error) {
 	if c.Session.CabinetToken == "" {
 		return nil, &Error{Code: 3, Stage: "cabinet_session_refresh_required"}
 	}
@@ -60,7 +64,11 @@ func (c *Client) cabinetRead(ctx context.Context, discovery bool, body interface
 	req.Header.Set("Referer", "https://go.uiscom.ru/")
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return nil, &Error{Code: 6, Stage: "cabinet_transport"}
+		code := 6
+		if write {
+			code = 9
+		}
+		return nil, &Error{Code: code, Stage: "cabinet_transport"}
 	}
 	defer resp.Body.Close()
 	code := 6
@@ -72,17 +80,35 @@ func (c *Client) cabinetRead(ctx context.Context, discovery bool, body interface
 	case resp.StatusCode == 429:
 		code = 8
 	}
+	if write && (resp.StatusCode >= 500 || resp.StatusCode == 408 || (resp.StatusCode/100 == 2 && resp.StatusCode != 200)) {
+		code = 9
+	}
 	if resp.StatusCode != 200 {
 		return nil, &Error{Code: code, Stage: "cabinet_http"}
 	}
+	raw, readErr := io.ReadAll(io.LimitReader(resp.Body, (16<<20)+1))
+	if readErr != nil || len(raw) > 16<<20 {
+		code := 7
+		if write {
+			code = 9
+		}
+		return nil, &Error{Code: code, Stage: "cabinet_response_size"}
+	}
 	var out Object
-	d := json.NewDecoder(io.LimitReader(resp.Body, 16<<20))
+	d := json.NewDecoder(bytes.NewReader(raw))
 	d.UseNumber()
-	if d.Decode(&out) != nil || out == nil {
-		return nil, &Error{Code: 7, Stage: "cabinet_schema"}
+	if d.Decode(&out) != nil || out == nil || d.Decode(new(interface{})) != io.EOF {
+		code := 7
+		if write {
+			code = 9
+		}
+		return nil, &Error{Code: code, Stage: "cabinet_schema"}
 	}
 	if e, ok := out["error"].(map[string]interface{}); ok {
 		code = 6
+		if write {
+			code = 9
+		}
 		if data, ok := e["data"].(map[string]interface{}); ok && (data["mnemonic"] == "access_token_invalid" || data["mnemonic"] == "access_token_expired") {
 			code = 3
 		}

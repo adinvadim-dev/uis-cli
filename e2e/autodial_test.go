@@ -208,6 +208,22 @@ func TestProductionAutodial(t *testing.T) {
 			t.Fatal("invalid number was accepted")
 		}
 	})
+
+	t.Run("live/import", func(t *testing.T) {
+		// Parsing this fixture never persists its number into a campaign or calls it.
+		file := filepath.Join(scratch, "uis-cli-test-import.csv")
+		if os.WriteFile(file, []byte("numa;name;comment\n70000000000;uis-cli e2e import;do not call\n"), 0600) != nil {
+			t.Fatal("cannot stage import CSV")
+		}
+		v := object(t, privateData(t, "import", "--input-file", file))
+		rows, ok := v["numbers"].([]any)
+		if !ok || len(rows) != 1 {
+			t.Fatal("CSV parser did not return one row")
+		}
+		if object(t, rows[0])["numa"] != "70000000000" {
+			t.Fatal("CSV parser changed fixture number")
+		}
+	})
 	// Every blocked write is exercised in a fresh CLI process without usable
 	// credentials, using synthetic IDs/content and never a customer target.
 	for _, tc := range []struct {
@@ -244,7 +260,7 @@ func TestProductionAutodial(t *testing.T) {
 			}
 		})
 	}
-	for _, action := range []string{"import", "delete"} {
+	for _, action := range []string{"delete"} {
 		t.Run("blocked/"+action, func(t *testing.T) {
 			offlineGuard(t)
 			args := []string{"autodial", action}
@@ -279,6 +295,17 @@ func TestProductionAutodial(t *testing.T) {
 				if plan["method"] != tc.method {
 					t.Fatal("wrong official route")
 				}
+				privateArgs := append(append([]string{}, args...), "--source", "private")
+				privatePlan := object(t, h.json(t, 0, append([]string{"--dry-run"}, privateArgs...)...))
+				if privatePlan["method"] != tc.method || privatePlan["source"] != "private.cabinet_rpc" || privatePlan["network"] != false {
+					t.Fatal("wrong keyless private plan")
+				}
+				if tc.write {
+					r, code := h.execute(t, privateArgs...)
+					if code != 10 || r.Error.Code != "confirmation_required" {
+						t.Fatal("private RPC mutation bypassed confirmation")
+					}
+				}
 				if tc.write {
 					r, code := h.execute(t, args...)
 					if code != 10 || r.Error.Code != "confirmation_required" {
@@ -288,17 +315,28 @@ func TestProductionAutodial(t *testing.T) {
 			}
 		})
 	}
-	t.Run("official/live-list", func(t *testing.T) {
-		r, code := h.execute(t, "auto-call-campaigns", "list", "--limit", "1")
-		if code == 3 && r.Error.Code == "authentication_required" {
-			t.Skip("Data API credential unavailable; official live list NOT verified")
-		}
-		if code != 0 {
-			t.Fatalf("official read exit=%d category=%s", code, r.Error.Code)
-		}
-		v := object(t, r.Data)
-		if _, ok := v["data"].([]any); !ok {
-			t.Fatal("missing official campaign array")
+
+	t.Run("official/live-list-keyless", func(t *testing.T) {
+		// Keep the bound cabinet session, but make API-key resolution impossible.
+		t.Setenv("UIS_CONFIG", guardConfig)
+		t.Setenv("UIS_TOKEN", "")
+		for _, source := range []string{"auto", "private"} {
+			for _, route := range [][]string{{"auto-call-campaigns", "list"}, {"call", "get.auto_call_campaigns"}} {
+				args := append(append([]string{}, route...), "--source", source, "--param", "limit:=1")
+				v := object(t, h.json(t, 0, args...))
+				if v["source"] != "private.cabinet_rpc" {
+					t.Fatal("keyless read selected wrong source")
+				}
+				rows, ok := v["data"].([]any)
+				if !ok {
+					t.Fatal("missing campaign array")
+				}
+				for _, row := range rows {
+					if !providerID.MatchString(portal.ID(object(t, row))) {
+						t.Fatal("invalid campaign ID")
+					}
+				}
+			}
 		}
 	})
 }

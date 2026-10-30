@@ -27,6 +27,9 @@ func newCallCmd(g *globalFlags) *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if handled, e := runAutodialRPC(g, cmd, method, params); handled {
+				return e
+			}
 			// UIS APIs typically require access_token in params.
 			if cfg.AccessToken != "" {
 				if _, ok := params["access_token"]; !ok {
@@ -38,6 +41,7 @@ func newCallCmd(g *globalFlags) *cobra.Command {
 		},
 	}
 
+	call.Flags().String("source", "auto", "Outgoing campaign authentication: auto, private or dataapi")
 	call.Flags().StringArrayVar(&paramKVs, "param", nil, "Method param: key=value or key:=<json> (repeatable)")
 	call.Flags().StringVar(&paramsJSON, "params-json", "", "Params as a JSON object string")
 	call.Flags().StringVar(&paramsFile, "params-file", "", "Read params JSON object from file ('-' for stdin)")

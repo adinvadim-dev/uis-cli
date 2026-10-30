@@ -43,6 +43,9 @@ func AutodialPlan(action, id string, payload Object) (AutodialRequest, error) {
 	case "export":
 		r.Method = "POST"
 		r.Path = "/auto_call/get_campaigns_numa_list"
+	case "import":
+		r.Method = "POST"
+		r.Path = "/auto_call/campaign/import_numbers"
 	case "listen":
 		r.Method = "POST"
 		r.Path = "/auto_call/campaign/listen_audio_message"
@@ -112,8 +115,18 @@ func (c *Client) Autodial(ctx context.Context, action, id string, payload Object
 	if e != nil {
 		return nil, &Error{Code: 2, Stage: "autodial_payload"}
 	}
+	contentType := "application/json"
+	var reader io.Reader = bytes.NewReader(body)
+	if action == "import" {
+		var b *bytes.Buffer
+		b, contentType, e = autodialImportBody(payload)
+		if e != nil {
+			return nil, e
+		}
+		reader = b
+	}
 	base := c.SupervisorURL
-	req, e := http.NewRequestWithContext(ctx, r.Method, base+r.Path, bytes.NewReader(body))
+	req, e := http.NewRequestWithContext(ctx, r.Method, base+r.Path, reader)
 	if e != nil {
 		return nil, e
 	}
@@ -122,7 +135,7 @@ func (c *Client) Autodial(ctx context.Context, action, id string, payload Object
 	req.Header.Set("X-Auth-Token", c.Session.CabinetToken)
 	req.Header.Set("X-Auth-Type", "jwt")
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", contentType)
 	req.Header.Set("Origin", "https://go.uiscom.ru")
 	req.Header.Set("Referer", "https://go.uiscom.ru/")
 	resp, e := c.HTTP.Do(req)
@@ -181,7 +194,7 @@ func (c *Client) Autodial(ctx context.Context, action, id string, payload Object
 			_, status := o["status"].(string)
 			shapeOK = grid && chart && name && status
 		}
-	case "validate":
+	case "validate", "import":
 		o, ok := v.(map[string]interface{})
 		if ok {
 			_, shapeOK = o["numbers"].([]interface{})

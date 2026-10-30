@@ -56,6 +56,13 @@ func newAutodial(g *globalFlags) *cobra.Command {
 					return exitf(2, "--payload-file is required; see docs/research/06-autodial-coverage.md")
 				}
 			}
+			if action == "import" {
+				input, _ := cmd.Flags().GetString("input-file")
+				if input == "" {
+					return exitf(2, "--input-file is required")
+				}
+				payload["input_file"] = input
+			}
 			if action == "list" {
 				from, ok := payload["begin_date"].(string)
 				till, ok2 := payload["end_date"].(string)
@@ -96,6 +103,9 @@ func newAutodial(g *globalFlags) *cobra.Command {
 			}
 			return emit(g, portal.Object{"source": "private.supervisor", "data": archive.Scrub(v), "limitations": []string{"Source-observed private contract; no snapshot or completeness guarantee"}})
 		}}
+		if action == "import" {
+			cmd.Flags().String("input-file", "", "CSV/XLSX file for server-side parsing; does not save a campaign")
+		}
 		cmd.Flags().String("payload-file", "", "Local JSON object; values never echoed in plans")
 		root.AddCommand(cmd)
 	}
