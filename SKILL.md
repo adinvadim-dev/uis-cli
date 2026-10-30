@@ -1,21 +1,25 @@
 ---
 name: uis-cli
-description: "Use for UIS calls, filters, support tickets and Data API commands."
+description: "UIS calls, transfers, filters, and support tickets."
+metadata: {"openclaw":{"requires":{"bins":["uis","python3"]}}}
 ---
 
-# UIS CLI
+# UIS
 
-Build with `make build`; binary `bin/uis`. Read [README.md](README.md) for examples and [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) before private operations.
+Use `uis --account ACCOUNT --json`; if PATH lacks `uis`, use `$HOME/.local/bin/uis`. In a source checkout, build with `make build` and use `bin/uis`. Credentials come from the configured credential process. Keep session files, credentials and recording URLs private.
 
-Use `uis --json` for one versioned success/error envelope. `--account NAME` selects a non-secret TOML profile; credentials come from external `credential_process` or `UIS_TOKEN`. Run `account doctor` / `auth status` for presence checks. Never pass secrets in flags, print session files, or log provider bodies.
+## Investigate a call or transfer
 
-- Calls: `calls search --source private` with phone/date/direction/lost/transfer predicates; use `--employee` / `--scenario` with names from private filter discovery. Numeric employee/scenario IDs require `--source dataapi`. Private results identify cabinet `communication_id`, source and bounded page; `show ID` with explicit private/Data API source; `legs ID`; `comment ID --body TEXT`; `tag ID --add ID|--remove ID`.
-- Discovery: `filters list|rapid|show --source private --report-type calls`, `reports list --source private`. Cabinet JWT login enables these reads without a Data API key.
-- Support: `sync`, `status`, `doctor`; local `ticket list|show|search`; `--live` for direct reads; `topic list`, `contact list`; `ticket create|reply|close|reopen`.
-- Generated resources and low-level `call METHOD --params-json JSON` remain available.
+For a phone number, failed transfer, or “who hung up?”, follow [the bounded investigation recipe](docs/TRANSFER_INVESTIGATION.md). It includes exact commands and the compact JSON helper, `scripts/call_brief.py`. Run the helper beside this installed skill; it reads CLI JSON from stdin without network or credentials. Keep raw results in private files and give the model the compact projection first.
 
-Private login/refresh: require `expected_login` and credential_process fields `portal.login`, `portal.password`; lazily request `captcha.2captcha_api_key` for SmartCaptcha. Use `auth login --surface private --no-input` before private search/discovery, `support sync`, `--live` ticket reads or private `calls show`. Login binds normalized credentials plus a successful authenticated read; it does not independently identify the provider principal. Production support mutations still return `capability_unavailable`: write principal/CSRF verification is not proven. Headed human captcha is follow-up; noninteractive challenges require 2Captcha. Do not bypass this boundary or assume an app bearer token works for support. No live mutation is authorized merely by invoking this skill.
+Start with a narrow, explicit date window and the supplied phone. Search, inspect the relevant call details, then answer from the event timeline. Completion means the selected call's time, participants, transfer result and termination evidence are accounted for; name unknowns explicitly. Match the terminating event to its call leg before attributing a hangup. A generic “employee disconnected” alone does not identify the receiving party.
 
-Local archive reads must work without credentials/network. `support sync` is the writer. SQLite archives are sensitive; attachment metadata does not preserve bytes.
+Use the existing bound session first. `account doctor` / `auth status` check presence, not live report access. Refresh once only for an explicit authentication error or missing cabinet session: `auth refresh --surface private --no-input`. A provider/transport error follows the recipe's bounded read recovery, not login. After the read budget is exhausted, return partial findings and the blocker.
 
-Before a mutation, inspect `--dry-run`; send only with explicit user authorization, TTY confirmation or `--force`. Dry-run reads a requested message file, but never attachments or credentials. On exit 9 (`outcome_unknown`) retain returned ticket ID/stage and reconcile with reads; never resend automatically. Ticket creation requires a provider ID before its separate initial comment. Do not enable sales, recognition, saved-filter writes, exports, customer-chat/CDR archives, or Call API originate.
+## Other operations
+
+Read [README.md](README.md) for commands and [capability limits](docs/IMPLEMENTATION.md) when a requested operation is unavailable. Private search/discovery uses cabinet JWT without a Data API key; exact employee/scenario names come from the private catalog. Use `scripts/call_brief.py filters --field FIELD` to inspect only the required field's operators, then `--values` when its values are needed. Numeric employee/scenario IDs and `calls legs` require a separate Data API key. Preserve source and ID provenance: cabinet communication IDs are not assumed to equal classic session IDs.
+
+Support: `support status` checks local archive freshness; `support sync` refreshes it; `support ticket list|show|search` reads offline, and `--live` reads the provider. See [authentication](docs/AUTHENTICATION.md) for session binding and captcha requirements.
+
+Writes require explicit task authorization. Inspect `--dry-run`, send once, and verify with a fresh read. Exit 9 means outcome unknown: retain returned identity and reconcile before retrying. Preserve the account binding and preflight checks; invoking this skill grants no mutation authority. SIP/project creation follows the Medivey process skill.

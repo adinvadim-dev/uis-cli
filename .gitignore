@@ -8,3 +8,7 @@ build/
 
 # local config (if you choose repo-local config during dev)
 config.json
+
+# Python skill tools
+__pycache__/
+*.pyc
