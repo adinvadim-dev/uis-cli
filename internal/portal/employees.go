@@ -467,10 +467,21 @@ func staffPreserved(resource string, before, after Object, patch Object) bool {
 		if resource == "softphone" && k == "va_settings" {
 			a, _ := before[k].(map[string]interface{})
 			b, _ := after[k].(map[string]interface{})
-			for key, v := range a {
-				if _, changed := patch[key]; !changed && !reflect.DeepEqual(v, b[key]) {
-					return false
+			// Compare both key sets: an added routing/coaching field is also
+			// an unrelated change, even when absent from the original card.
+			unchangedBefore, unchangedAfter := Object{}, Object{}
+			for key, value := range a {
+				if _, changed := patch[key]; !changed {
+					unchangedBefore[key] = value
 				}
+			}
+			for key, value := range b {
+				if _, changed := patch[key]; !changed {
+					unchangedAfter[key] = value
+				}
+			}
+			if !reflect.DeepEqual(unchangedBefore, unchangedAfter) {
+				return false
 			}
 			continue
 		}

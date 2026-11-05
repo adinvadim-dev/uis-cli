@@ -365,6 +365,7 @@ func TestStaffUpdateDetectsCollateralChangesWithoutRetry(t *testing.T) {
 		{"employee login", "employees", "login"},
 		{"employee phone block", "employees", "phones"},
 		{"softphone phone block", "softphone", "phones"},
+		{"softphone added coaching", "softphone", "coach"},
 		{"SIP ownership", "sip-lines", "employee_id"},
 		{"SIP password", "sip-lines", "password"},
 		{"SIP caller-ID", "sip-lines", "virtual_phone_id"},
@@ -398,7 +399,9 @@ func TestStaffUpdateDetectsCollateralChangesWithoutRetry(t *testing.T) {
 					for k, v := range sent {
 						saved[k] = v
 					}
-					if tc.corrupt == "phones" {
+					if tc.corrupt == "coach" {
+						saved["va_settings"].(map[string]interface{})["coach"] = Object{"coach_employee_id": json.Number("99"), "is_called_always": true}
+					} else if tc.corrupt == "phones" {
 						delete(saved["va_settings"].(map[string]interface{}), "phones")
 					} else {
 						saved[tc.corrupt] = json.Number("999")
