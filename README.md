@@ -139,3 +139,5 @@ Employee operations through the private cabinet API are under `uis staff`:
 `staff groups list|get`, and `staff sip-lines list|get|update`. See
 [employee coverage and limitations](docs/research/10-employees-coverage.md).
 These are live current-state commands; update dry-runs are offline and value-redacted.
+
+The project [verification skill](.agents/skills/verify-uis-cli/SKILL.md) builds an isolated real binary, records command/effect evidence and preserves it after cleanup. Its [feature map](.agents/skills/verify-uis-cli/features/README.md) separates local mutation guards, live reads and unverified production writes.

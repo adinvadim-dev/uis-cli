@@ -63,3 +63,7 @@ credential; it does not prove a reset API. Do not rotate credentials to fix
 registration. SIP reassignment is a separate compound action and remains deferred,
 as do role/license changes, group CRUD and provisioning. This skill grants no
 permission to change production employees or access rights.
+
+## Verification
+
+Before delivering CLI changes, use [verify-uis-cli](.agents/skills/verify-uis-cli/SKILL.md) and its maintained feature map. Keep local guard proof, live reads and independently authorized live writes distinct.
