@@ -1,10 +1,16 @@
 """Protect evidence retention and the verification harness's privacy boundary."""
+import argparse
+import contextlib
+import hashlib
+import io
 import importlib.util
 import json
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location('uis_verifier', ROOT / '.agents/skills/verify-uis-cli/scripts/verify.py')
@@ -19,6 +25,35 @@ class VerificationSkillTests(unittest.TestCase):
         (run / 'evidence').mkdir()
         verify.save(run / 'run.json', {'schema': verify.SCHEMA, 'repo': str(ROOT), 'cleaned': False})
         return run
+
+    def test_fingerprint_accepts_tracked_go_file_deleted_in_working_tree(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            subprocess.run(['git', 'init', '-q', str(root)], check=True)
+            module = root / 'go.mod'
+            module.write_text('module fixture\n')
+            deleted = root / 'removed.go'
+            deleted.write_text('package fixture\n')
+            subprocess.run(['git', '-C', str(root), 'add', 'go.mod', 'removed.go'], check=True)
+            with mock.patch.object(verify, 'REPO', root):
+                before = verify.fingerprint()
+                deleted.unlink()
+                expected = hashlib.sha256(b'go.mod' + module.read_bytes()).hexdigest()
+                self.assertEqual(verify.fingerprint(), expected)
+                self.assertNotEqual(before, expected)
+
+    def test_launch_source_read_failure_is_cleanable_and_keeps_failure_evidence(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.object(verify, 'fingerprint', side_effect=FileNotFoundError('synthetic source race')):
+                with contextlib.redirect_stderr(io.StringIO()):
+                    with self.assertRaises(FileNotFoundError):
+                        verify.launch(argparse.Namespace(evidence_root=tmp))
+            runs = list(Path(tmp).iterdir())
+            self.assertEqual(len(runs), 1)
+            run = runs[0]
+            self.assertFalse((run / 'scratch').exists())
+            self.assertTrue(json.loads((run / 'run.json').read_text())['cleaned'])
+            self.assertTrue(json.loads((run / 'evidence/cleanup.json').read_text())['evidence_retained'])
 
     def test_cleanup_removes_only_owned_scratch_and_keeps_proof(self):
         with tempfile.TemporaryDirectory() as tmp:

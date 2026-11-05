@@ -37,7 +37,7 @@ def fingerprint():
     digest = hashlib.sha256()
     for name in sorted(git('ls-files', '--cached', '--others', '--exclude-standard').splitlines()):
         path = REPO / name
-        if path.suffix == '.go' or name in ('go.mod', 'go.sum'):
+        if path.is_file() and (path.suffix == '.go' or name in ('go.mod', 'go.sum')):
             digest.update(name.encode())
             digest.update(path.read_bytes())
     return digest.hexdigest()
@@ -102,10 +102,13 @@ def launch(args):
     (run / 'evidence').mkdir(mode=0o700)
     (run / 'scratch').mkdir(mode=0o700)
     print('Verification run: ' + str(run), file=sys.stderr)
-    save(run / 'run.json', {'schema': SCHEMA, 'repo': str(REPO), 'commit': git('rev-parse', 'HEAD'),
-                           'source_sha256': fingerprint(), 'driver_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(), 'created_at': dt.datetime.now(dt.timezone.utc).isoformat(),
-                           'cleaned': False})
+    manifest = {'schema': SCHEMA, 'repo': str(REPO), 'cleaned': False,
+                'created_at': dt.datetime.now(dt.timezone.utc).isoformat()}
+    save(run / 'run.json', manifest)
     try:
+        manifest.update(commit=git('rev-parse', 'HEAD'), source_sha256=fingerprint(),
+                        driver_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest())
+        save(run / 'run.json', manifest)
         built = subprocess.run(['go', 'build', '-o', str(run / 'scratch' / 'uis'), './cmd/uis'], cwd=REPO,
                                capture_output=True, timeout=180)
         # Compiler output contains source locations, not live provider responses.

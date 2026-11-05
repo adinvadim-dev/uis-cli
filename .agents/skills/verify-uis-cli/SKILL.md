@@ -78,7 +78,9 @@ provider PUT acceptance or read-after-write behavior.
 feature result JSON. Every proof names its boundary: real CLI local guards, live
 GETs, or an explicitly authorized live lifecycle. Staff live responses stay in
 memory; evidence records counts, comparison results and command shapes without
-names, contact data, SIP addresses, passwords, tokens or raw provider bodies.
+employee/customer names, contact data, SIP addresses, passwords, tokens or raw
+provider bodies. The selected account alias and config path are nonsecret run
+metadata; keep evidence private unless sanitized for sharing.
 
 Record an unreachable entry point and its missing precondition as unverified.
 For writes, prove the action and a fresh stored-state read, including unchanged
