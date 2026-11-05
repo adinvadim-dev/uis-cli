@@ -1,6 +1,6 @@
 ---
 name: uis-cli
-description: "UIS calls, transfers, filters, and support tickets."
+description: "UIS calls, employees, SIP diagnostics, campaigns and support."
 metadata: {"openclaw":{"requires":{"bins":["uis","python3"]}}}
 ---
 
@@ -33,3 +33,33 @@ Create requires future account-local begin_date, nonempty employee_ids/phone_lis
 Authorized mutations use confirmation/preflight, one dispatch and read-back verification. On exit 9 preserve the payload, name marker and campaign_id, reconcile current state, and stop automatic retries. Read success is not write proof. Official auto-call-* methods accept --source private with cabinet JWT and no API key; auto prefers a bound session. Use dataapi for the separate key route. Import parses CSV/XLSX without saving; keep returned rows private. Stop-list exclude/include also verify their effects.
 
 Start/resume/in_process, planned transitions and audio preview may initiate calls/charges. Keep activation as dry-run in a no-call test task. Audio preview dispatch is gated. Use synthetic contacts and a far-future start for an explicitly authorized lifecycle; cancellation residue requires explicit permission. Record dispatch/recovery stages durably, never create another campaign after an unresolved attempt. On 401 refresh once; if it fails, report the sanitized blocker and continue independent work.
+
+## Employees, softphone and SIP registration
+
+Use `staff` for the richer **private cabinet** surface. Start with
+`staff employees list`, then `staff employees get ID`, `staff employees groups ID`,
+`staff softphone get ID`, and `staff sip-lines list --employee-id ID`.
+`staff groups list|get ID` resolves the current cabinet group catalog.
+For comparisons read both employee IDs freshly. Employee availability,
+SIP `is_registered` and line `state` are independent; do not infer registration
+from an employee's available/DND status. `registrations` contains only the current
+or last rows exposed by the cabinet, not complete history. Outputs omit passwords,
+SIP addresses/logins, server/IP details, tokens and contact addresses.
+
+For authorized changes use `staff employees update ID`, `staff softphone update ID`
+or `staff sip-lines update ID` with `--payload-file FILE`. Read
+[the patch contract and gaps](docs/research/10-employees-coverage.md) and
+[CLI_SPEC.md](docs/CLI_SPEC.md) first. Employee edits cover basic fields, schedule
+and group membership. Softphone accepts only `is_need_hide_numbers`,
+`is_click_to_call_auto_answer_enabled`, `is_out_calls_auto_answer_enabled` booleans.
+SIP edits cover `state` (`active`/`manual_lock`), `channels_count` (1–2), and
+`is_multiterminal`. Inspect `--dry-run` before supplying `--force` for an explicitly
+authorized change. Dry-run does no session/auth/network I/O and prints field names
+only. One dispatch plus fresh effect read-back produces `verified=true`; exit 9
+requires re-reading the same ID before any retry. Do not print raw cabinet DTOs.
+
+Registration reset is not covered: the editor's password refresh icon rotates a
+credential; it does not prove a reset API. Do not rotate credentials to fix
+registration. SIP reassignment is a separate compound action and remains deferred,
+as do role/license changes, group CRUD and provisioning. This skill grants no
+permission to change production employees or access rights.

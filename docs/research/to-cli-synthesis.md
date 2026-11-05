@@ -73,3 +73,16 @@ Research date: 2026-10-29. Grilling skipped by explicit user request (`без г
 - [02-authenticated-web-surface.md](02-authenticated-web-surface.md)
 - [03-data-and-crawl-boundary.md](03-data-and-crawl-boundary.md)
 - [04-actions-and-failure-semantics.md](04-actions-and-failure-semantics.md)
+
+## Employee extension (2026-11-05)
+
+The owner's four operational scenarios define the existing-product boundary:
+private employee cards/edits, group membership, softphone switches and SIP
+registration/line settings. Retain Go, existing auth and output/confirmation
+contracts; add `staff` so generated Data API commands remain compatible. No new
+archive, credentials, paid features or account rights are needed. Current snapshots
+are direct live commands; revision/event archives remain deferred. The command
+spec and capability matrix are in [10-employees-coverage.md](10-employees-coverage.md).
+Source-observed mutation contracts are exercised on a local HTTP server only;
+provider verification remains read-only. Reset registration and compound SIP
+reassignment are explicit gaps, rather than guessed endpoints.

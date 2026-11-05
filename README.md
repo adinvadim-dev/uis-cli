@@ -133,3 +133,9 @@ Private reads require a bound cabinet session with supervisor access. `list` req
 Use `caller-rules`, `caller-numbers`, `caller-groups`, `caller-lists`, `media`, `scenarios`, `schedules`, and `timezone` to resolve settings through the private session. Creation dates are account local time. Campaigns use employee/playlist settings, without a proven scenario_id or separate weekday-schedule binding. `import --input-file contacts.csv` parses CSV/XLSX without saving; supply returned numbers to create/update. `exclude|include --payload-file` manages the stop-list with verified cleanup. Official outgoing commands accept `--source auto|private|dataapi`; auto/private use cabinet JWT without a Data API key.
 
 Valid direct production probes created one future campaign, edited contacts/employees and cancelled it; actual CLI RPC additions/removals/cancellation and read/import/stop-list flows passed. The permitted residue is cancelled with zero active contacts. Activation/audio and other billing-sensitive behavior remain untested live. See the [coverage inventory](docs/research/06-autodial-coverage.md) for per-operation evidence and the [production test guide](docs/PRODUCTION_E2E.md) for opt-ins.
+
+Employee operations through the private cabinet API are under `uis staff`:
+`staff employees list|get|groups|update`, `staff softphone get|update`,
+`staff groups list|get`, and `staff sip-lines list|get|update`. See
+[employee coverage and limitations](docs/research/10-employees-coverage.md).
+These are live current-state commands; update dry-runs are offline and value-redacted.
