@@ -49,3 +49,15 @@ Supervisor creation requires a full editor DTO; empty drafts returned 500. Valid
 Cabinet mutation result.data={} plus metadata={} is an acknowledgement, not a completed effect. Keyless RPC reads back status/phone_numbers and only then returns verified=true. High-level status commands enforce next_statuses. Clear rejects finalized contacts before any removal; deleted historical rows remain. Terminal repeated clear/cancel are no-ops. The API's physical DELETE returned 405; audio preview is deliberately gated because it initiates calls.
 
 Production direct probes established valid future creation and contact/employee PUT, and the actual CLI established contact RPC addition/removal and cancellation. The sole authorized residue is cancelled and has no active contacts. Read/import/stop-list and keyless listing have command-level production coverage. Fresh lifecycle writes have a separate opt-in/journal and are not automatically repeated. See [coverage and proof limits](research/06-autodial-coverage.md).
+
+## Private employee operations
+
+`staff` provides current-state employee cards, group catalog/membership, three
+softphone switches and SIP line registration/recent rows through the cabinet REST
+API. Patches preserve the fresh writable DTO, dispatch once and verify requested
+effects by exact-ID read-back. Explicit safe projections exclude SIP credentials,
+locators, IPs, contact details and arbitrary response fields. Existing generated
+Data API commands are unchanged. See the [coverage matrix](research/10-employees-coverage.md)
+for source evidence, read-only live verification and explicit deferrals (notably
+registration reset, credential rotation, SIP reassignment, roles/licenses and group
+CRUD). No production employee write was performed for this feature.

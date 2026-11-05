@@ -44,7 +44,7 @@ def main():
         for name in paths:
             dest = args.output / name
             dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(ROOT / name, dest)
+            shutil.copy2(ROOT / name, dest)
         # Also check the actual packaged tree, not only the source.
         manifest(args.output)
     print(json.dumps({'ok': True, 'files': paths}))

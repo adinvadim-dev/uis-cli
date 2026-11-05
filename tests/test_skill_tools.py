@@ -119,6 +119,8 @@ class BundleTests(unittest.TestCase):
             self.assertEqual(proc.returncode, 0, proc.stderr)
             self.assertTrue((output / 'docs/TRANSFER_INVESTIGATION.md').is_file())
             self.assertTrue((output / 'docs/research/05-private-call-search-live.md').is_file())
+            self.assertTrue((output / '.agents/skills/verify-uis-cli/features/staff-diagnostics.md').is_file())
+            self.assertTrue((output / '.agents/skills/verify-uis-cli/scripts/verify.py').stat().st_mode & 0o111)
             code = subprocess.run([sys.executable, str(output / 'scripts/call_brief.py'),
                 'search'], input=json.dumps(envelope({'data': [], 'metadata': {}})),
                 capture_output=True, text=True)

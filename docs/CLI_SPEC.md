@@ -234,3 +234,63 @@ Search and filters/reports discovery accept `--source auto|private|dataapi`. Aut
 The four generated `auto-call-*` methods and their low-level `call` equivalents accept `--source auto|private|dataapi`. Auto selects an existing bound cabinet session; only absence permits key-based fallback. Expired/mismatched sessions and provider errors do not silently switch credentials. Private uses cabinet JWT against RPC, strips access_token, and preserves the result's data/metadata shape with source=private.cabinet_rpc. Write confirmation precedes dispatch; preflight checks the configured binding/authenticated support read. Ambiguous writes return outcome_unknown and are never replayed. Explicit private routing of unrelated low-level methods is unavailable. No API key is required for the cabinet route; write entitlement is not implied by successful reads.
 
 Private `autodial exclude|include --payload-file JSON` are enabled mutations with confirmation, binding/authentication preflight, one POST/DELETE with numa in the query, HTTP 204 acknowledgement and read-after-write verification. A missing/failed read-back, unexpected successful acknowledgement or ambiguous transport failure returns outcome_unknown (9), without repeating the write. Dry-run remains value-redacted and does not read sessions.
+
+## Cabinet staff (current-state operations)
+
+`uis [--account ACCOUNT] [--json|--plain] staff` uses the promoted private session.
+The existing generated employee/SIP Data API commands keep their old contract.
+
+```text
+staff employees list
+staff employees get ID
+staff employees groups ID
+staff employees update ID --payload-file FILE
+staff groups list
+staff groups get ID
+staff softphone get ID
+staff softphone update ID --payload-file FILE
+staff sip-lines list [--employee-id ID]
+staff sip-lines get ID
+staff sip-lines update ID --payload-file FILE
+```
+
+Every read is live and carries source/observation time. Lists fetch the cabinet's
+whole array; SIP employee filtering is local. IDs are canonical positive integers.
+No secrets are printed, even in JSON. No raw-output escape hatch exists.
+
+Employee patch fields: `first_name`, `last_name` (nonempty), `description`, `email`,
+`phone` (strings), `schedule_id`, `main_staff_group_id` (positive numeric ID/null),
+`staff_group_ids` (unique numeric IDs; empty array clears membership).
+Softphone patch fields: `is_need_hide_numbers`,
+`is_click_to_call_auto_answer_enabled`, `is_out_calls_auto_answer_enabled`
+(booleans). SIP patch fields: `state` (`active` or `manual_lock`),
+`channels_count` (1 or 2), `is_multiterminal` (boolean).
+
+Updates accept exactly one JSON object, ≤1 MiB, with no unsupported fields.
+`--dry-run` validates without config/session/credential/network I/O and reports
+field names, verb/path and read-back requirement, never values. Live writes require
+confirmation or `--force`; `--no-input` fails without it. A fresh GET supplies an explicit writable DTO merged
+with the narrow patch; auth/credential/computed fields are excluded. Unknown
+nested writable fields fail before dispatch. One PUT is dispatched, then a
+bounded fresh GET verifies requested effects and unchanged rights/ownership/settings. Unchanged patches are verified no-ops. Cancellation/ambiguous dispatch
+never resends the mutation. Exit 9 means unknown outcome: re-read the same ID
+before retrying. Other errors use the existing CLI exit taxonomy/envelope.
+See [coverage and deferrals](research/10-employees-coverage.md).
+
+Examples (synthetic IDs; JSON goes in a private local file):
+
+```sh
+uis --account medivey --json staff employees get 123
+uis --account medivey --json staff employees groups 123
+uis --account medivey --json staff softphone get 123
+uis --account medivey --json staff sip-lines list --employee-id 123
+uis --dry-run --json staff softphone update 123 --payload-file softphone.json
+uis --account medivey --force --json staff softphone update 123 --payload-file softphone.json
+```
+
+Write compatibility limit: the frontend submits a full form; the server's minimal
+required DTO and omission semantics have not been verified by a live write. The
+CLI excludes auth/credential fields and checks unchanged rights/configuration in
+read-back. A rejection or unrelated change is a blocker, not permission to resend
+a wider payload. No version/ETag concurrency contract was observed; the initial
+GET minimizes stale state but cannot prevent a simultaneous cabinet edit.

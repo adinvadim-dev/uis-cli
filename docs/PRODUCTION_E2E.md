@@ -105,3 +105,15 @@ Cancellation is logical cleanup. Physical DELETE returned 405; deleted contact r
 ## Evidence
 
 Direct corrected production creation and contact/employee PUT succeeded; CLI RPC contact addition/removal and cancellation succeeded with verified read-back. The sole fixture is cancelled with zero active contacts. Earlier empty-draft 500 was an invalid DTO, not a proven service-wide outage. The [inventory](research/06-autodial-coverage.md) records full coverage and remaining live-proof limits. Start/resume, enabled prediction/audio and draft-only edits are tested locally rather than activated in production.
+
+## Staff verification and feature map
+
+Use the project-local [verify-uis-cli skill](../.agents/skills/verify-uis-cli/SKILL.md)
+for an isolated binary, safe evidence and cleanup. Its staff-read journey exercises
+every staff read entry point with an existing authorized session and compares
+registered/unregistered lines. Its staff-guards journey observes local dry-run and
+confirmation behavior without credentials or provider writes. The maintained
+[feature map](../.agents/skills/verify-uis-cli/features/README.md) records the
+remaining live-write proof gap and maps calls/support/autodial to the existing
+production suites. Missing fixtures fail or remain explicitly unverified; they
+are never manufactured through production mutations.
