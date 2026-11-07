@@ -78,6 +78,41 @@ class BriefTests(unittest.TestCase):
         self.assertEqual(selected['values_available'], 10000)
         self.assertEqual(selected['omitted'], 9998)
 
+    def test_field_discovery_pages_descriptors_without_catalog_values(self):
+        payload = envelope({'source': 'private.cabinet_rpc', 'data': {'data': [
+            {'id': 'employees', 'name': 'Employees', 'format': 'list',
+             'operators': [{'id': '=', 'name': 'equals'}],
+             'values': [{'id': 'nested-private-field', 'format': 'text',
+                         'name': 'Private employee'}]},
+            {'id': 'contact_phone_number', 'name': 'Caller', 'format': 'text',
+             'operators': ['=', 'like'], 'values': ['private-phone'],
+             'recording_url': 'https://private.invalid/signed-secret'}]}})
+        code, out = brief('fields', payload, '--limit', '1')
+        self.assertEqual(code, 0)
+        self.assertEqual(out['fields'], [{'id': 'employees', 'name': 'Employees',
+            'format': 'list', 'operators': [{'id': '=', 'name': 'equals'}]}])
+        self.assertEqual(out['total_rows'], 2)
+        self.assertEqual(out['omitted'], 1)
+        self.assertEqual(out['remaining'], 1)
+        _, second = brief('fields', payload, '--offset', '1', '--limit', '1')
+        self.assertEqual(second['fields'], [{'id': 'contact_phone_number',
+            'name': 'Caller', 'format': 'text', 'operators': ['=', 'like']}])
+        self.assertEqual(second['remaining'], 0)
+        _, empty = brief('fields', payload, '--offset', '2', '--limit', '1')
+        self.assertEqual(empty['fields'], [])
+        self.assertEqual(empty['remaining'], 0)
+        rendered = json.dumps([out, second])
+        self.assertNotIn('nested-private-field', rendered)
+        self.assertNotIn('Private employee', rendered)
+        self.assertNotIn('private-phone', rendered)
+        self.assertNotIn('signed-secret', rendered)
+
+    def test_field_discovery_rejects_unknown_catalog_shape(self):
+        code, out = brief('fields', envelope({'data': {'unexpected': 'private-body'}}))
+        self.assertEqual(code, 2)
+        self.assertFalse(out['ok'])
+        self.assertNotIn('private-body', json.dumps(out))
+
     def test_error_does_not_become_empty_success_or_echo_provider_body(self):
         payload = {'schemaVersion': 'uis.cli/v1', 'ok': False, 'error': {
             'code': 'provider_error', 'message': 'unsafe-provider-content',

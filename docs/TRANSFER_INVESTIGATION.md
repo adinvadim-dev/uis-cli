@@ -4,6 +4,15 @@ Use the skill's existing account and private session. This recipe is read-only. 
 
 ## Search
 
+A project or map extension identifies a destination in the originating system.
+Resolve it there to a transfer, caller number and date before searching UIS.
+`--virtual-number` filters the UIS virtual phone number, while `--phone` filters
+the caller. Destination SIP addresses and map extensions require their own
+verified mapping. An empty result under those unrelated filters leaves the
+requested destination investigation unresolved. Report the filters and scope
+actually checked. If the originating transfer read is forbidden, retain that
+access failure and obtain an authorized call reference before concluding absence.
+
 Resolve the installed skill directory to an absolute `SKILL_DIR`. Set `UIS_BIN` to the installed executable (`uis` or `$HOME/.local/bin/uis`), `ACCOUNT` to the requested account, `PHONE` to the supplied number, and `FROM` / `TILL` to explicit `YYYY-MM-DD HH:MM:SS` boundaries. Use shell variables as separate quoted arguments, not a string of combined flags.
 
 Use pipeline error propagation (`set -o pipefail` in bash/zsh), `umask 077`, and a fresh private capture directory outside the repo. Raw files stay outside model context.
@@ -57,10 +66,15 @@ Distinguish who initiated the transfer from who ended each leg. Quote the termin
 ```sh
 "$UIS_BIN" --account "$ACCOUNT" --json --timeout 12s --retries 0 \
   filters list --source private --report-type calls > "$CAPTURE_DIR/filters.json"
+python3 "$SKILL_DIR/scripts/call_brief.py" fields --limit 100 \
+  < "$CAPTURE_DIR/filters.json"
 python3 "$SKILL_DIR/scripts/call_brief.py" filters --field contact_phone_number \
   < "$CAPTURE_DIR/filters.json"
 ```
 
-Default catalog output includes field identity/type/operators, not account-wide values. Add `--values --offset N --limit N` only for the required employee/scenario field. Keep the full catalog in its private file.
+`fields` lists bounded field descriptors and operators from the captured response.
+Continue with `--offset N` while `remaining` is positive. Reuse that file for the
+selected `filters --field` query. Add `--values --offset N --limit N` only for
+the required employee/scenario field. Keep the full catalog in its private file.
 
 Exit 3 / explicit auth failure: inspect `auth status`; refresh once if the session is missing/expired. Exit 6 / provider error: follow the bounded window/retry route above. Exit 8 / rate limit: stop and report it. Permission or unavailable capability: report the missing access. Refresh can invoke captcha and take minutes; it is not a generic transport recovery. After 60 seconds without useful data, send a progress message with the failing stage; after the request budget, return partial findings rather than continuing an open-ended search.
