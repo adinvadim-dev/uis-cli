@@ -130,6 +130,7 @@ def project(envelope, args):
             raise ShapeError('catalog fields unavailable')
         out['fields'] = [p.fields(row, ('id', 'name', 'format', 'operators'))
                          for row in page(rows, args)]
+        out['remaining'] = max(0, len(rows) - args.offset - len(out['fields']))
     else:
         rows = list(filter_fields(data.get('data'), args.field))
         if len(rows) != 1:

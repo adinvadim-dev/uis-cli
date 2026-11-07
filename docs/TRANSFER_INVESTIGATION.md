@@ -73,7 +73,7 @@ python3 "$SKILL_DIR/scripts/call_brief.py" filters --field contact_phone_number 
 ```
 
 `fields` lists bounded field descriptors and operators from the captured response.
-Continue with `--offset N` when `omitted` is positive. Reuse that file for the
+Continue with `--offset N` while `remaining` is positive. Reuse that file for the
 selected `filters --field` query. Add `--values --offset N --limit N` only for
 the required employee/scenario field. Keep the full catalog in its private file.
 
