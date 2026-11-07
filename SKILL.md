@@ -18,7 +18,7 @@ Use the existing bound session first. `account doctor` / `auth status` check pre
 
 ## Other operations
 
-Read [README.md](README.md) for commands and [capability limits](docs/IMPLEMENTATION.md) when a requested operation is unavailable. Private search/discovery uses cabinet JWT without a Data API key; exact employee/scenario names come from the private catalog. Use `scripts/call_brief.py filters --field FIELD` to inspect only the required field's operators, then `--values` when its values are needed. Numeric employee/scenario IDs and `calls legs` require a separate Data API key. Preserve source and ID provenance: cabinet communication IDs are not assumed to equal classic session IDs.
+Read [README.md](README.md) for commands and [capability limits](docs/IMPLEMENTATION.md) when a requested operation is unavailable. Private search/discovery uses cabinet JWT without a Data API key; exact employee/scenario names come from the private catalog. Use `scripts/call_brief.py fields` to discover field descriptors from the saved catalog, then `filters --field FIELD` for its operators and `--values` when its values are needed. Numeric employee/scenario IDs and `calls legs` require a separate Data API key. Preserve source and ID provenance: cabinet communication IDs are not assumed to equal classic session IDs.
 
 Support: `support status` checks local archive freshness; `support sync` refreshes it; `support ticket list|show|search` reads offline, and `--live` reads the provider. See [authentication](docs/AUTHENTICATION.md) for session binding and captcha requirements.
 

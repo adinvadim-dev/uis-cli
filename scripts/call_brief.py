@@ -78,14 +78,16 @@ def events(rows, parent='', depth=0):
             yield from events(children, path + '/' + key, depth + 1)
 
 
-def filter_fields(value, field, depth=0):
+def filter_fields(value, field=None, depth=0):
     if depth > 30:
         raise ShapeError('excessive catalog nesting')
     if isinstance(value, list):
         for child in value:
             yield from filter_fields(child, field, depth + 1)
     elif isinstance(value, dict):
-        if value.get('id') == field and ('format' in value or 'operators' in value):
+        if (isinstance(value.get('id'), str)
+                and (field is None or value['id'] == field)
+                and ('format' in value or 'operators' in value)):
             yield value
             return
         for key, child in value.items():
@@ -122,6 +124,12 @@ def project(envelope, args):
         out['events'] = [dict(path=path, **p.fields(row, EVENT_FIELDS))
                          for path, row in page(rows, args)]
         out['attribution'] = 'Match termination to a leg; generic employee disconnect is ambiguous.'
+    elif args.mode == 'fields':
+        rows = list(filter_fields(data.get('data')))
+        if not rows:
+            raise ShapeError('catalog fields unavailable')
+        out['fields'] = [p.fields(row, ('id', 'name', 'format', 'operators'))
+                         for row in page(rows, args)]
     else:
         rows = list(filter_fields(data.get('data'), args.field))
         if len(rows) != 1:
@@ -145,7 +153,7 @@ def project(envelope, args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('mode', choices=['search', 'details', 'filters'])
+    parser.add_argument('mode', choices=['search', 'details', 'fields', 'filters'])
     parser.add_argument('--field', help='exact catalog field ID (required for filters)')
     parser.add_argument('--values', action='store_true', help='include one bounded field value page')
     parser.add_argument('--offset', type=int, default=0)
@@ -153,6 +161,8 @@ def main():
     args = parser.parse_args()
     if args.offset < 0 or not 1 <= args.limit <= 100 or (args.mode == 'filters' and not args.field):
         parser.error('use offset >=0, limit 1..100, and --field for filters')
+    if args.mode == 'fields' and (args.field or args.values):
+        parser.error('fields lists descriptors; use filters --field for values')
     try:
         raw = sys.stdin.buffer.read(MAX_INPUT + 1)
         if len(raw) > MAX_INPUT:
