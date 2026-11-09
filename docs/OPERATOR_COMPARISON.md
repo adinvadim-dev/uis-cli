@@ -112,8 +112,6 @@ changed observations, not recover an unavailable past member set.
 medivey cc key-activity --date-from 2026-11-09 --date-till 2026-11-09 --json
 medivey lead transfer get "$TRANSFER_ID" --json
 medivey lead journal --phone "$PHONE_OR_MASK" --types transfer,call,crm_lead --all --json
-uis --account medivey --json calls show "$COMMUNICATION_ID" \
-  --from '2026-11-09 00:00:00' --till '2026-11-09 18:00:00'
 ```
 
 Keys are a subset of manual dialing, never an incoming line. `key-activity`
@@ -122,6 +120,8 @@ counts nor proof of dialing intent. Its reveal owner is `operatorUserId`
 (Authentik pk); transfer author is `extUserId`. The journal may be incomplete
 and CRM phone-linking alone does not establish CRM initiation. Inspect exact
 call/transfer facts only when available; label unsupported links as unconfirmed.
+Do not pass a cabinet communication ID to a session-ID command unless their
+mapping has been independently verified; fallback paths may use classic IDs.
 Do not fetch every call's details for a simple operator summary.
 
 ## Historical comparisons
