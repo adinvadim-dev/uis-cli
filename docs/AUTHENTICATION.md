@@ -95,6 +95,8 @@ Session files live under `$XDG_STATE_HOME/uis/accounts/<name>/` (fallback `~/.lo
 
 ## Principal and drift
 
+Private-session authentication failures include `auth refresh --surface private --no-input` in the recovery guidance. The default `auth login` / `auth refresh` surface is Data API and does not renew a cabinet session. Permission failures do not suggest reauthentication; recovery remains an explicit separate command.
+
 Before any private mutation:
 
 - Require promoted session for the selected account.
