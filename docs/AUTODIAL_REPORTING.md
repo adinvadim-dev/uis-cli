@@ -20,4 +20,6 @@ For a read-only historical proof:
 python3 <skill-root>/scripts/autodial_summary.py --account ACCOUNT --date 2026-11-06
 ```
 
+The date constrains the provider campaign-list query; campaign status is read at execution time. `campaign_status_basis=current` and the historical message explicitly identify this scope. A completed or paused campaign disappears from the `in_process` selection even when it was running on the chosen date. The helper does not reconstruct past statuses or a complete day-of-calls snapshot; compare exact campaign IDs and their current statuses when a replay changes.
+
 Historical mode always sets `should_send=false`, including on a weekday. `--now` accepts an offset-aware ISO instant for clock verification and also forces `should_send=false`. Neither mode proves a scheduled execution or actual delivery. Keep the live invocation, installed provenance, account, source limitations, elapsed time and separate scheduler/provider receipt in rollout evidence.
