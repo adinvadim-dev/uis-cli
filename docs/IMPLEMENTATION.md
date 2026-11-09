@@ -61,3 +61,13 @@ Data API commands are unchanged. See the [coverage matrix](research/10-employees
 for source evidence, read-only live verification and explicit deferrals (notably
 registration reset, credential rotation, SIP reassignment, roles/licenses and group
 CRUD). No production employee write was performed for this feature.
+
+## Operator comparison (2026-11-10)
+
+Private search adds opt-in analysis fields and bounded multi-page collection.
+Live reads confirmed `call_type.value_id=auto_out_calls` while MAV was `Нет` on
+the same calls. The offline helper compares explicitly bound employee identities
+with existing Medivey snapshots, checks dates/duplicates/coverage and exposes
+source counts separately from map transfers. It does not establish per-call
+links from masked phones or restore unavailable historical membership.
+See [the command recipe and limits](OPERATOR_COMPARISON.md).

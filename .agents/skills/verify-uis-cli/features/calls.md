@@ -27,3 +27,19 @@ Preconditions: existing authorized profile/session, Data API credentials through
 - The full existing suite needs both private and Data API surfaces. A missing credential or fixture is a failed precondition, not proof of the remaining surface.
 - Private communication IDs and classic call-session IDs are not interchangeable. Private employee/scenario filters use names; numeric filters need Data API.
 - Ordinary commands do not refresh sessions automatically. Login/refresh may involve paid CAPTCHA and are separate from these reads.
+
+## Operator analysis extension
+
+- Entry points: `calls search --source private --analysis`, the same with `--all`
+  and explicit dates/page cap, and `scripts/operator_compare.py --help` plus the
+  [cross-CLI recipe](../../../../docs/OPERATOR_COMPARISON.md).
+- Local protocol proof: `go test ./internal/cli -run 'TestPrivateAnalysisPagination|TestAnalysisFlagsValidateBeforeCredentials'`; Python real-helper fixtures:
+  `python3 -m unittest discover -s tests -p test_operator_compare.py -v`.
+- Drive the launched binary against the existing bound read-only profile with
+  `--analysis --limit 3`, then an exact known employee with `--all --limit 1000`.
+  Store raw responses in protected external files; record only field presence,
+  source enum/counts, paging coverage and hashes in shareable evidence. Verify
+  the offline helper against actual saved UIS and Medivey snapshots, naming any
+  missing Medivey access/identity/timezone prerequisite. No mutation or grant.
+- All-page results are bounded live observations, not historical snapshots.
+  Numeric employee ID filtering is local to the helper, not a private API claim.

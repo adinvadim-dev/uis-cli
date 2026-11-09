@@ -141,3 +141,7 @@ Employee operations through the private cabinet API are under `uis staff`:
 These are live current-state commands; update dry-runs are offline and value-redacted.
 
 The project [verification skill](.agents/skills/verify-uis-cli/SKILL.md) builds an isolated real binary, records command/effect evidence and preserves it after cleanup. Its [feature map](.agents/skills/verify-uis-cli/features/README.md) separates local mutation guards, live reads and unverified production writes.
+
+For per-employee source/duration exports and comparison with existing Medivey
+commands, use [Operator comparison](docs/OPERATOR_COMPARISON.md). It includes
+`calls search --analysis --all`, the offline helper and explicit limitations.
