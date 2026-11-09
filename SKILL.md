@@ -69,3 +69,13 @@ permission to change production employees or access rights.
 ## Verification
 
 Before delivering CLI changes, use [verify-uis-cli](.agents/skills/verify-uis-cli/SKILL.md) and its maintained feature map. Keep local guard proof, live reads and independently authorized live writes distinct.
+
+## Operator call sources and Medivey comparison
+
+For operator priorities, autodial/manual/incoming counts, keys or cross-system
+operator comparison, use [the two-CLI recipe](docs/OPERATOR_COMPARISON.md).
+`calls search --source private --analysis --all` exports bounded source/duration
+facts; the linked offline helper compares verified employee IDs with existing
+`medivey-cli` snapshots. Check coverage and timezone, keep observations separate,
+and distinguish employee cohorts from exact call/transfer links. Keys are a
+manual subset; MAV, masked phones and shared names do not establish origin.

@@ -235,3 +235,129 @@ func TestPrivateCallSearchRecoveryGuidance(t *testing.T) {
 		})
 	}
 }
+
+func TestPrivateAnalysisPagination(t *testing.T) {
+	for _, mode := range []string{"complete", "filtered", "page_limit", "offset", "drift", "duplicate", "short", "unknown_empty"} {
+		t.Run(mode, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Setenv("UIS_CONFIG", filepath.Join(dir, "config.toml"))
+			t.Setenv("XDG_STATE_HOME", dir)
+			t.Setenv("UIS_TOKEN", "")
+			if err := profile.Save(profile.Path(), profile.Config{DefaultAccount: "fixture", Accounts: map[string]profile.Account{"fixture": {ExpectedLogin: "fixture@example.invalid"}}}); err != nil {
+				t.Fatal(err)
+			}
+			os.MkdirAll(profile.State("fixture"), 0700)
+			os.WriteFile(filepath.Join(profile.State("fixture"), "session.json"), []byte(`{"login":"fixture@example.invalid","cabinet_token":"fixture"}`), 0600)
+			old := http.DefaultTransport
+			t.Cleanup(func() { http.DefaultTransport = old })
+			requests := 0
+			http.DefaultTransport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				requests++
+				var q portal.CallQuery
+				if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
+					t.Fatal(err)
+				}
+				for _, field := range []string{"communication_id", "employees", "call_talk_duration", "call_total_duration", "call_type", "is_mass_auto_call_enabled"} {
+					found := false
+					for _, actual := range q.Fields {
+						found = found || actual == field
+					}
+					if !found {
+						t.Fatalf("analysis evidence field missing: %s", field)
+					}
+				}
+				id, total := q.Offset+1, 2
+				if mode == "duplicate" {
+					id = 1
+				}
+				if mode == "drift" && requests == 2 {
+					total = 3
+				}
+				body := portal.Object{"metadata": portal.Object{"total_items": total}, "data": []portal.Object{{"communication_id": id, "call_talk_duration": "00:01:00", "call_type": portal.Object{"value_id": "auto_out_calls"}}}}
+				if mode == "short" {
+					body["data"] = []portal.Object{}
+				}
+				if mode == "unknown_empty" {
+					body = portal.Object{"metadata": portal.Object{}, "data": []portal.Object{}}
+				}
+				encoded, _ := json.Marshal(body)
+				return &http.Response{StatusCode: 200, Header: http.Header{}, Body: io.NopCloser(strings.NewReader(string(encoded)))}, nil
+			})
+			args := []string{"--json", "calls", "search", "--source", "private", "--analysis", "--all", "--limit", "1", "--max-pages", "2", "--from", "2026-11-09 00:00:00", "--till", "2026-11-09 18:00:00"}
+			if mode == "page_limit" {
+				args = append(args, "--max-pages", "1")
+			}
+			if mode == "filtered" {
+				args = append(args, "--scenario", "Synthetic scenario")
+			}
+			if mode == "offset" {
+				args = append(args, "--offset", "1")
+			}
+			var result error
+			out := capture(t, func() { root := newRootCmd(); root.SetArgs(args); result = root.Execute() })
+			if mode == "drift" || mode == "duplicate" || mode == "short" {
+				var ee *ExitError
+				if !errors.As(result, &ee) || ee.Code != 7 {
+					t.Fatalf("unstable population accepted: %v", result)
+				}
+				return
+			}
+			if result != nil {
+				t.Fatal(result)
+			}
+			var envelope struct {
+				Data struct {
+					QueryScope struct {
+						Filter struct {
+							Field string   `json:"field"`
+							Value []string `json:"value"`
+						} `json:"filter"`
+					} `json:"query_scope"`
+					Coverage struct {
+						Complete bool   `json:"complete"`
+						Returned int    `json:"returned"`
+						Next     *int   `json:"next_offset"`
+						Reason   string `json:"reason"`
+					} `json:"coverage"`
+				} `json:"data"`
+			}
+			if json.Unmarshal([]byte(out), &envelope) != nil {
+				t.Fatal("bad JSON")
+			}
+			coverage := envelope.Data.Coverage
+			if coverage.Complete != (mode == "complete" || mode == "filtered") {
+				t.Fatalf("wrong completeness: %s", out)
+			}
+			if mode == "complete" && (coverage.Returned != 2 || requests != 2 || coverage.Next != nil) {
+				t.Fatal(out)
+			}
+			if mode == "page_limit" && (coverage.Next == nil || *coverage.Next != 1 || coverage.Reason != "page_limit") {
+				t.Fatal(out)
+			}
+			if mode == "unknown_empty" && coverage.Reason != "provider_count_unavailable" {
+				t.Fatal(out)
+			}
+			if mode == "unknown_empty" && coverage.Next != nil {
+				t.Fatal("unknown empty page must not return a non-advancing cursor")
+			}
+			if mode == "filtered" && (envelope.Data.QueryScope.Filter.Field != "call_scenario" || len(envelope.Data.QueryScope.Filter.Value) != 1 || envelope.Data.QueryScope.Filter.Value[0] != "Synthetic scenario") {
+				t.Fatal("query restriction missing from exported scope")
+			}
+		})
+	}
+}
+
+func TestAnalysisFlagsValidateBeforeCredentials(t *testing.T) {
+	t.Setenv("UIS_CONFIG", "/must/not/read.toml")
+	for _, args := range [][]string{
+		{"--analysis"}, {"--source", "dataapi", "--analysis"}, {"--source", "private", "--all"},
+		{"--source", "private", "--max-pages", "2"}, {"--source", "private", "--all", "--max-pages", "0"},
+	} {
+		root := newRootCmd()
+		root.SetArgs(append([]string{"--dry-run", "calls", "search"}, args...))
+		var ee *ExitError
+		if err := root.Execute(); !errors.As(err, &ee) || ee.Code != 2 {
+			t.Fatalf("expected local usage error, got %v", err)
+		}
+	}
+}

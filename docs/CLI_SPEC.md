@@ -294,3 +294,17 @@ CLI excludes auth/credential fields and checks unchanged rights/configuration in
 read-back. A rejection or unrelated change is a blocker, not permission to resend
 a wider payload. No version/ETag concurrency contract was observed; the initial
 GET minimizes stale state but cannot prevent a simultaneous cabinet edit.
+
+## Operator analysis fields and bounded private paging
+
+`calls search --source private --analysis` adds `call_talk_duration`,
+`call_total_duration`, `call_type` and `is_mass_auto_call_enabled` to the existing
+field projection. The raw MAV flag is not a classifier. `--all` requires explicit
+`--from` and `--till`, without `--date-hint`, and accepts `--max-pages 1..100`
+(default 25). It has independent 50,000-row and 150-second bounds. Complete
+coverage requires offset zero and exhaustion of the stable reported total;
+page/row caps return an incomplete result and `next_offset`. Drift, duplicate
+IDs and short pages fail closed. Source fallback and implicit refresh remain
+unavailable for these flags. Dates keep literal cabinet wall-time semantics.
+The [employee comparison recipe](OPERATOR_COMPARISON.md) and linked offline
+helper explain two-CLI identity binding and the separate populations.

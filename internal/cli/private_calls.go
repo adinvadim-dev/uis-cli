@@ -1,10 +1,12 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/spf13/cobra"
 	"os"
 	"strings"
+	"time"
 	"uis-cli/internal/archive"
 	"uis-cli/internal/portal"
 	"uis-cli/internal/profile"
@@ -38,6 +40,10 @@ func selectCallClient(g *globalFlags, source string) (*portal.Client, error) {
 func privateCallQuery(cmd *cobra.Command, from, till string, limit, offset int) (portal.CallQuery, error) {
 	q := portal.CallQuery{ReportType: "calls", Mode: "flat", From: from, Till: till, Limit: limit, Offset: offset,
 		Fields: []string{"communication_id", "call_start_date_time", "call_direction", "contact_phone_number", "virtual_phone_number", "call_status", "employees", "call_scenario", "call_is_transfer"}}
+	analysis, _ := cmd.Flags().GetBool("analysis")
+	if analysis {
+		q.Fields = append(q.Fields, "call_talk_duration", "call_total_duration", "call_type", "is_mass_auto_call_enabled")
+	}
 	filters := []interface{}{}
 	add := func(field string, v interface{}) {
 		filters = append(filters, portal.Object{"field": field, "operator": "=", "value": v})
@@ -117,6 +123,18 @@ func privateCallQuery(cmd *cobra.Command, from, till string, limit, offset int) 
 	return q, nil
 }
 func runPrivateSearch(g *globalFlags, cmd *cobra.Command, source, from, till string, limit, offset int) (bool, error) {
+	all, _ := cmd.Flags().GetBool("all")
+	analysis, _ := cmd.Flags().GetBool("analysis")
+	maxPages, _ := cmd.Flags().GetInt("max-pages")
+	if maxPages < 1 || maxPages > 100 || (cmd.Flags().Changed("max-pages") && !all) {
+		return true, exitf(2, "--max-pages requires --all and a value from 1 to 100")
+	}
+	if (all || analysis) && source != "private" {
+		return true, exitf(2, "--all and --analysis require explicit --source private")
+	}
+	if all && (!cmd.Flags().Changed("from") || !cmd.Flags().Changed("till") || cmd.Flags().Changed("date-hint")) {
+		return true, exitf(2, "--all requires explicit --from and --till, without --date-hint")
+	}
 	if source == "dataapi" {
 		return false, nil
 	}
@@ -141,9 +159,77 @@ func runPrivateSearch(g *globalFlags, cmd *cobra.Command, source, from, till str
 	if err != nil {
 		return true, err
 	}
+	if all {
+		return true, collectPrivateCalls(g, cmd, c, q, maxPages)
+	}
 	page, e := c.SearchCalls(cmd.Context(), q)
 	if e != nil {
 		return true, operationError(e)
 	}
 	return true, emit(g, portal.Object{"source": "private.report_constructor", "data": archive.Scrub(page.Data), "metadata": page.Metadata, "limit": limit, "offset": offset, "date_from": from, "date_till": till, "limitations": []string{"Live offset page; no snapshot or historical completeness guarantee", "Cabinet communication_id; private filters use cabinet names and values"}})
+}
+
+func collectPrivateCalls(g *globalFlags, cmd *cobra.Command, c *portal.Client, q portal.CallQuery, maxPages int) error {
+	ctx, cancel := context.WithTimeout(cmd.Context(), 150*time.Second)
+	defer cancel()
+	started := time.Now().UTC().Format(time.RFC3339)
+	rows := []portal.Object{}
+	seen := map[string]bool{}
+	var total *int64
+	initialOffset, pages := q.Offset, 0
+	ended, reason := false, "page_limit"
+	for pages < maxPages && len(rows) < 50000 {
+		if remaining := 50000 - len(rows); q.Limit > remaining {
+			q.Limit = remaining
+		}
+		page, err := c.SearchCalls(ctx, q)
+		if err != nil {
+			return operationError(err)
+		}
+		pages++
+		if total != nil && page.Metadata.Total != nil && *total != *page.Metadata.Total {
+			return exitf(7, "Call population changed between pages; retain previous snapshot and retry")
+		}
+		if page.Metadata.Total != nil {
+			total = page.Metadata.Total
+		}
+		for _, row := range page.Data {
+			id := string(row["communication_id"].(json.Number)) // SearchCalls validates identity.
+			if seen[id] {
+				return exitf(7, "Repeated communication ID across pages; population is unstable")
+			}
+			seen[id] = true
+			rows = append(rows, row)
+		}
+		q.Offset += len(page.Data)
+		if total != nil && int64(q.Offset) > *total {
+			return exitf(7, "Provider count disagrees with returned call rows")
+		}
+		if total != nil && int64(q.Offset) == *total {
+			ended, reason = true, "provider_count_reached"
+			break
+		}
+		if len(page.Data) < q.Limit {
+			if total != nil {
+				return exitf(7, "Short call page before provider count; population is incomplete")
+			}
+			reason = "provider_count_unavailable"
+			break
+		}
+	}
+	if !ended && len(rows) == 50000 {
+		reason = "record_limit"
+	}
+	var next interface{} = q.Offset
+	if ended || reason == "provider_count_unavailable" {
+		next = nil
+	}
+	return emit(g, portal.Object{
+		"source": "private.report_constructor", "data": archive.Scrub(rows),
+		"date_from": q.From, "date_till": q.Till, "fields": q.Fields,
+		"query_scope": portal.Object{"filter": q.Filter},
+		"coverage":    portal.Object{"complete": ended && initialOffset == 0, "reason": reason, "returned": len(rows), "reported_total": total, "pages": pages, "initial_offset": initialOffset, "next_offset": next, "snapshot_isolation": false},
+		"observation": portal.Object{"started_at": started, "finished_at": time.Now().UTC().Format(time.RFC3339)},
+		"limitations": []string{"Cabinet wall time: verify account timezone before calling this a Moscow interval", "Private communication_id is not a verified classic session ID", "Stable count is not snapshot isolation; keep each observation separately", "MAV flag and call type are raw evidence, not inferred manual/key/CRM origins"},
+	})
 }
