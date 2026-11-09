@@ -51,6 +51,9 @@ func confirm(g *globalFlags, plan interface{}) error {
 	}
 	return nil
 }
+
+const privateAuthRecovery = "auth refresh --surface private --no-input"
+
 func operationError(e error) error {
 	if e == nil {
 		return nil
@@ -61,7 +64,12 @@ func operationError(e error) error {
 		if pe.CampaignID != "" {
 			details["campaign_id"] = pe.CampaignID
 		}
-		return &ExitError{Code: pe.Code, Msg: pe.Error(), Details: details}
+		message := pe.Error()
+		if pe.Code == 3 {
+			details["recovery"] = privateAuthRecovery
+			message += "; run " + privateAuthRecovery
+		}
+		return &ExitError{Code: pe.Code, Msg: message, Details: details}
 	}
 	if errors.Is(e, sql.ErrNoRows) {
 		return exitf(5, "Not found in local archive")
@@ -75,7 +83,7 @@ func privateClient(g *globalFlags) (*portal.Client, error) {
 	}
 	s, e := portal.LoadSession(profile.State(name))
 	if e != nil {
-		return nil, exitf(3, "Private session unavailable; run auth login")
+		return nil, &ExitError{Code: 3, Msg: "Private session unavailable; run " + privateAuthRecovery, Details: map[string]interface{}{"recovery": privateAuthRecovery}}
 	}
 	if portal.NormalizeLogin(account.ExpectedLogin) == "" || portal.NormalizeLogin(s.Login) != portal.NormalizeLogin(account.ExpectedLogin) || (account.ExpectedCustomerID != "" && s.CustomerID != account.ExpectedCustomerID) {
 		return nil, exitf(3, "Private session principal does not match account binding")

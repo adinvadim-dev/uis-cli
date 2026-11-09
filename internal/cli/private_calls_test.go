@@ -156,3 +156,82 @@ func TestPrivateRawFilterPreservesLargeNumericID(t *testing.T) {
 		t.Fatalf("ID rounded: %s", b)
 	}
 }
+
+// Private auth recovery must select the cabinet surface even without a Data API key.
+func TestPrivateCallSearchRecoveryGuidance(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		session    bool
+		token      string
+		httpStatus int
+		exit       int
+	}{
+		{"missing_session", false, "", 0, 3},
+		{"legacy_session", true, "", 0, 3},
+		{"expired_session", true, "fixture-jwt", 401, 3},
+		{"permission_denied", true, "fixture-jwt", 403, 4},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			t.Setenv("UIS_CONFIG", filepath.Join(dir, "config.toml"))
+			t.Setenv("XDG_STATE_HOME", dir)
+			t.Setenv("UIS_TOKEN", "")
+			account := profile.Account{ExpectedLogin: "fixture@example.invalid"}
+			account.CredentialProcess.Command = []string{"/must/not/run"}
+			if err := profile.Save(profile.Path(), profile.Config{DefaultAccount: "fixture", Accounts: map[string]profile.Account{"fixture": account}}); err != nil {
+				t.Fatal(err)
+			}
+			if tc.session {
+				if err := os.MkdirAll(profile.State("fixture"), 0700); err != nil {
+					t.Fatal(err)
+				}
+				b, err := json.Marshal(portal.Session{Login: account.ExpectedLogin, CabinetToken: tc.token})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(profile.State("fixture"), "session.json"), b, 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			old := http.DefaultTransport
+			t.Cleanup(func() { http.DefaultTransport = old })
+			requests := 0
+			http.DefaultTransport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				requests++
+				return &http.Response{StatusCode: tc.httpStatus, Header: http.Header{}, Body: io.NopCloser(strings.NewReader("private-provider-body"))}, nil
+			})
+			var code int
+			out := capture(t, func() {
+				code = Run([]string{"--json", "calls", "search", "--source", "private", "--limit", "1"})
+			})
+			if code != tc.exit {
+				t.Fatalf("want exit %d, got %d: %s", tc.exit, code, out)
+			}
+			var envelope struct {
+				Error struct {
+					Details map[string]interface{} `json:"details"`
+				} `json:"error"`
+			}
+			if err := json.Unmarshal([]byte(out), &envelope); err != nil {
+				t.Fatal(err)
+			}
+			hint, hasHint := envelope.Error.Details["recovery"]
+			if tc.exit == 3 && hint != "auth refresh --surface private --no-input" {
+				t.Fatalf("JSON private auth recovery selects wrong surface: %s", out)
+			}
+			if tc.exit == 4 && hasHint {
+				t.Fatalf("permission denial must not suggest reauthentication: %s", out)
+			}
+			if strings.Contains(out, "private-provider-body") {
+				t.Fatal("provider body exposed")
+			}
+			wantRequests := 0
+			if tc.httpStatus != 0 {
+				wantRequests = 1
+			}
+			if requests != wantRequests {
+				t.Fatalf("requests=%d want=%d", requests, wantRequests)
+			}
+		})
+	}
+}
