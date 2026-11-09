@@ -69,6 +69,7 @@ def collect(instant, client, day=None, budget=150, clock=time.monotonic):
     weekend = local.weekday() >= 5
     result = {'msk_now': local.isoformat(), 'day': str(day or local.date()),
               'mode': 'historical' if historical else 'scheduled', 'weekend_msk': weekend,
+              'campaign_status_basis': 'current',
               'should_send': False, 'campaigns': [], 'failures': [], 'limitations': [LIMITATION]}
     if weekend and not historical:
         result.update(skip_reason='weekend_msk', elapsed_sec=round(clock() - started, 3))
@@ -171,10 +172,12 @@ def collect(instant, client, day=None, budget=150, clock=time.monotonic):
             percent = lambda part, whole: round(part * 100 / whole) if whole else 0
             lines.append(f'{row["name"]}: набрано {n} → дозвон {m} ({percent(m, n)}%) → перевод {k} ({percent(k, m)}%)')
     if not campaigns:
-        lines.append('Запущенных кампаний автообзвона сейчас нет.')
+        lines.append(f'По фильтру списка {day} нет кампаний, которые сейчас в работе.'
+                     if historical else 'Запущенных кампаний автообзвона сейчас нет.')
     lines.append(LIMITATION)
     if historical:
-        lines.append(f'Исторические данные за {day}; не запуск расписания.')
+        lines.append(f'Фильтр списка: {day}; только кампании, которые сейчас в работе. '
+                     'Статусы на эту дату не восстановлены; не запуск расписания.')
     result.update(message_text='\n'.join(lines), should_send=not weekend and not historical,
                   auth_refresh_used=refresh_attempted, elapsed_sec=round(clock() - started, 3))
     return result
@@ -184,7 +187,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--uis-bin', default=shutil.which('uis') or 'uis')
     parser.add_argument('--account', default='medivey')
-    parser.add_argument('--date', type=dt.date.fromisoformat, help='Historical Moscow date; never sendable')
+    parser.add_argument('--date', type=dt.date.fromisoformat, help='Moscow list-date filter; current campaign status, never sendable')
     parser.add_argument('--now', help='Offset-aware ISO instant for verification; never sendable')
     args = parser.parse_args()
     try:

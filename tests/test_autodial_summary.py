@@ -87,11 +87,24 @@ class SummaryTest(unittest.TestCase):
         self.assertIn('недоступен', result['message_text'])
         self.assertNotIn('сейчас нет', result['message_text'])
 
-    def test_historical_proof_cannot_recommend_delivery(self):
-        result = summary.collect(SATURDAY, FakeClient(), day=dt.date(2026, 11, 6))
-        self.assertEqual(result['mode'], 'historical')
-        self.assertFalse(result['should_send'])
-        self.assertIn('Исторические данные', result['message_text'])
+    def test_historical_proof_discloses_current_status_selection_without_delivery(self):
+        day = dt.date(2026, 11, 6)
+        for rows in [[{'id': 1, 'status': 'in_process'}],
+                     [{'id': 1, 'status': 'paused'}, {'id': 2, 'status': 'completed'}]]:
+            with self.subTest(rows=rows):
+                client = FakeClient(rows=rows)
+                result = summary.collect(SATURDAY, client, day=day)
+                self.assertEqual(result['mode'], 'historical')
+                self.assertFalse(result['should_send'])
+                self.assertEqual(result['campaign_status_basis'], 'current')
+                self.assertIn('сейчас в работе', result['message_text'])
+                self.assertIn('Статусы на эту дату не восстановлены', result['message_text'])
+                self.assertNotIn('Исторические данные за', result['message_text'])
+                self.assertIn(str(day), result['message_text'])
+                if rows[0]['status'] != 'in_process':
+                    self.assertEqual(result['campaigns'], [])
+                    self.assertIn('По фильтру списка', result['message_text'])
+                    self.assertEqual(len(client.calls), 1)
 
     def test_refresh_is_bounded_and_once_for_concurrent_auth_failures(self):
         client = FakeClient(rows=[{'id': n, 'name': str(n), 'status': 'in_process'} for n in range(1, 5)])
