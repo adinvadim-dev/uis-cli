@@ -259,6 +259,7 @@ class BundleTests(unittest.TestCase):
                                    '--output', str(output)], capture_output=True, text=True)
             self.assertEqual(proc.returncode, 0, proc.stderr)
             self.assertTrue((output / 'docs/TRANSFER_INVESTIGATION.md').is_file())
+            self.assertTrue((output / 'docs/CALL_ANALYTICS.md').is_file())
             self.assertTrue((output / 'docs/AUTH_SELF_HEAL.md').is_file())
             self.assertTrue((output / 'docs/research/05-private-call-search-live.md').is_file())
             self.assertTrue((output / '.agents/skills/verify-uis-cli/features/staff-diagnostics.md').is_file())

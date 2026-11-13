@@ -57,9 +57,9 @@ python3 "$SKILL_DIR/scripts/call_brief.py" details \
   < "$CAPTURE_DIR/detail-$CALL_ID.json"
 ```
 
-Allow at most three detail requests. The helper keeps nested events with parent paths; `omitted` or `truncated_strings` means the projection is incomplete. Read a targeted next page with `details --offset N --limit N` from the same capture when needed. A reduced Data API fallback or unsupported shape is insufficient for a full private timeline; disclose it. Stop once the requested facts are supported.
+Allow at most three detail requests here; counts and keypresses over many calls follow [call analytics](CALL_ANALYTICS.md). The helper keeps nested events with parent paths; `omitted` or `truncated_strings` means the projection is incomplete. Read a targeted next page with `details --offset N --limit N` from the same capture when needed. A reduced Data API fallback or unsupported shape is insufficient for a full private timeline; disclose it. Stop once the requested facts are supported.
 
-Distinguish who initiated the transfer from who ended each leg. Quote the termination event with its time and leg/participant context. Label an unidentified side as unknown; a short connection alone does not prove rejection or a technical fault. Separate explicit provider failures from interpretation. Final answer: searched date/window, relevant call IDs/times, transfer initiator/destination, connected duration, termination evidence, and unresolved limitations.
+Distinguish who initiated the transfer from who ended each leg. Quote the termination event with its time and leg/participant context. Label an unidentified side as unknown; «робот» needs the autodial identity and the leg it ended (see [call analytics](CALL_ANALYTICS.md#who-is-the-robot)). A short connection alone does not prove rejection or a technical fault. Separate explicit provider failures from interpretation. Final answer: searched date/window, relevant call IDs/times, transfer initiator/destination, connected duration, termination evidence, and unresolved limitations.
 
 ## Targeted catalog and errors
 
