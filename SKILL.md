@@ -14,7 +14,7 @@ For a phone number, failed transfer, or “who hung up?”, follow [the bounded 
 
 Start with a narrow, explicit date window and the supplied phone. Search, inspect the relevant call details, then answer from the event timeline. Completion means the selected call's time, participants, transfer result and termination evidence are accounted for; name unknowns explicitly. Match the terminating event to its call leg before attributing a hangup. A generic “employee disconnected” alone does not identify the receiving party.
 
-Use the existing bound session first. `account doctor` / `auth status` check presence, not live report access. Refresh once only for an explicit authentication error or missing cabinet session: `auth refresh --surface private --no-input`. A provider/transport error follows the recipe's bounded read recovery, not login. After the read budget is exhausted, return partial findings and the blocker.
+Use the existing bound session first. `account doctor` / `auth status` check presence, not live report access. A green status or a working `staff employees list` does not prove `calls search --source private`. On explicit auth error (`authentication_required`, exit 3, recovery `auth refresh --surface private --no-input`), follow [the self-heal recipe](docs/AUTH_SELF_HEAL.md): doctor/status → one private refresh (≥180s, `--no-input`, captcha via credential-process) → login once if refresh fails → re-read the same command. Do not SIGTERM a captcha refresh at 20–45s. A provider/transport error follows the recipe's bounded read recovery, not login. If still blocked, name the exact human step from that doc, not a generic escalation. After the read budget is exhausted, return partial findings and the blocker.
 
 ## Other operations
 
