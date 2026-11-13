@@ -43,3 +43,11 @@ Preconditions: existing authorized profile/session, Data API credentials through
   missing Medivey access/identity/timezone prerequisite. No mutation or grant.
 - All-page results are bounded live observations, not historical snapshots.
   Numeric employee ID filtering is local to the helper, not a private API claim.
+
+## Call analytics helper
+
+- Entry point: `scripts/call_brief.py dtmf [FILE ...]` over saved `calls show`
+  captures, per the [analytics recipe](../../../../docs/CALL_ANALYTICS.md).
+- Local proof: `python3 -m unittest tests.test_skill_tools -k Dtmf -v`. For a live
+  check, run it on protected captures of one known call with a keypress and
+  compare `key_counts` with the cabinet timeline; record counts only.

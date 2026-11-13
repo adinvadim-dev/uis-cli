@@ -100,7 +100,9 @@ For call/transfer investigations, start with [the bounded recipe](docs/TRANSFER_
 The Python 3 standard-library helper `scripts/call_brief.py` projects search rows,
 nested private timelines and one requested filter field without loading raw provider
 bodies or account-wide catalogs into the model context. It preserves source, IDs,
-unknown counts and explicit omission/truncation markers. It performs no network calls.
+unknown counts and explicit omission/truncation markers. Its `dtmf` mode counts
+keypresses across saved call details and lists failed captures instead of zeroing
+them ([call analytics](docs/CALL_ANALYTICS.md)). It performs no network calls.
 
 `make check` runs Go tests/vet, Python contract tests and recursive skill dependency
 validation. `make install-hooks` installs the same local pre-commit gate; no GitHub
