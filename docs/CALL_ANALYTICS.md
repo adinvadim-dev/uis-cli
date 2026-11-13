@@ -64,7 +64,8 @@ returns `calls_scanned`, `calls_with_dtmf`, `key_counts` (events),
 `calls_by_key` (distinct calls) and `sequence_counts`. Drop `--summary` for
 per-call events with masked party labels. Failed or reduced captures appear in
 `failed` with a reason and are never zero-key calls; unrecognised DTMF-like text
-appears in `unparsed`. Either makes `complete: false` and exit 1: re-read the
+appears in `unparsed`, and its call is listed in `calls_with_unparsed_dtmf`, not
+`calls_without_dtmf`. Either makes `complete: false` and exit 1: re-read the
 failed IDs once, then report the count as incomplete with scanned/failed numbers.
 An empty capture (failed or timed-out read) is reported as `empty_input`. Also
 compare `calls_scanned` with the number of IDs in `ids.txt`; a shortfall is an

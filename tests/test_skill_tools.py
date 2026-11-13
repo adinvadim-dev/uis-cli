@@ -261,6 +261,8 @@ class DtmfTests(unittest.TestCase):
         self.assertFalse(out['complete'])
         self.assertEqual(out['key_counts'], {})
         self.assertEqual(out['calls_with_dtmf'], 0)
+        self.assertEqual(out['calls_without_dtmf'], [])
+        self.assertEqual(out['calls_with_unparsed_dtmf'], [106])
         self.assertEqual([(u['path'], u['reason']) for u in out['unparsed']], [
             ('/0', 'unknown_text'), ('/1', 'invalid_key'), ('/2', 'dtmf_like_without_mnemonic')])
         self.assertNotIn('79161234567', json.dumps(out))

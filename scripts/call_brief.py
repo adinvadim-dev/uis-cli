@@ -294,7 +294,10 @@ def dtmf_report(captures, summary=False):
            'sequence_counts': dict(sorted(sequence_counts.items())),
            'duplicate_events': duplicates, 'failed': failed, 'unparsed': unparsed}
     if not summary:
-        out['calls_without_dtmf'] = [k for k, v in calls.items() if not v]
+        unresolved = {u['call_id'] for u in unparsed}
+        # A call with unrecognised DTMF-like evidence is unresolved, never "no keypress".
+        out['calls_without_dtmf'] = [k for k, v in calls.items() if not v and k not in unresolved]
+        out['calls_with_unparsed_dtmf'] = [k for k in calls if k in unresolved]
         out['calls'] = [{'call_id': k, 'dtmf': v} for k, v in calls.items() if v]
     return out, 0 if complete else 1
 
