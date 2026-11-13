@@ -66,6 +66,9 @@ per-call events with masked party labels. Failed or reduced captures appear in
 `failed` with a reason and are never zero-key calls; unrecognised DTMF-like text
 appears in `unparsed`. Either makes `complete: false` and exit 1: re-read the
 failed IDs once, then report the count as incomplete with scanned/failed numbers.
+An empty capture (failed or timed-out read) is reported as `empty_input`. Also
+compare `calls_scanned` with the number of IDs in `ids.txt`; a shortfall is an
+incomplete count, never a smaller total.
 
 ## Who is the robot
 

@@ -200,6 +200,10 @@ def read_captures(paths, stdin):
         if len(raw) > MAX_INPUT:
             yield name, 'input_exceeds_16_MiB'
             continue
+        if not raw.strip():
+            # A failed or timed-out `calls show` leaves an empty capture: a failure, never "no keys".
+            yield name, 'empty_input'
+            continue
         try:
             doc = json.loads(raw)
         except ValueError:
@@ -234,7 +238,7 @@ def detail_rows(capture):
     data = capture.get('data')
     detail = data.get('data') if isinstance(data, dict) else None
     header = detail.get('header') if isinstance(detail, dict) else None
-    if (capture.get('ok') is not True or data.get('reduced') or not isinstance(header, dict)
+    if (capture.get('ok') is not True or not isinstance(data, dict) or data.get('reduced') or not isinstance(header, dict)
             or not isinstance(header.get('id'), (int, str)) or isinstance(header.get('id'), bool)):
         return 'reduced_or_unsupported_detail'
     try:

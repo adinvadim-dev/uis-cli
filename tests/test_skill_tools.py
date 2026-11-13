@@ -234,6 +234,22 @@ class DtmfTests(unittest.TestCase):
             ('/nonexistent/detail.json', 'unreadable')])
         self.assertNotIn('private-body', json.dumps(out))
 
+    def test_empty_capture_and_non_dict_data_are_failures(self):
+        not_dict = {'schemaVersion': 'uis.cli/v1', 'ok': True, 'data': None}
+        listed = {'schemaVersion': 'uis.cli/v1', 'ok': True, 'data': []}
+        with tempfile.TemporaryDirectory() as temp:
+            empty = Path(temp) / 'detail-108.json'
+            empty.write_text('')
+            blank = Path(temp) / 'detail-109.json'
+            blank.write_text('  \n')
+            code, out = run_dtmf(str(empty), str(blank), '-',
+                                 stdin='\n'.join([json.dumps(self.CALL_B), json.dumps(not_dict), json.dumps(listed)]))
+        self.assertEqual(code, 1)
+        self.assertFalse(out['complete'])
+        self.assertEqual(out['calls_scanned'], 1)
+        self.assertEqual([f['reason'] for f in out['failed']],
+                         ['empty_input', 'empty_input', 'reduced_or_unsupported_detail', 'reduced_or_unsupported_detail'])
+
     def test_unknown_dtmf_text_is_reported_unparsed(self):
         call = detail(106, [
             dtmf_event('10:00:00', 'Абонент 79161234567 что-то сделал'),
