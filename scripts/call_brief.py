@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Offline, bounded projection of uis.cli/v1 envelopes. No credentials or I/O writes."""
 import argparse
+import html
 import json
 import re
 import sys
@@ -152,9 +153,153 @@ def project(envelope, args):
     return out, 0
 
 
+BOLD = re.compile(r'<b>(.*?)</b>', re.S | re.I)
+KEY_TEXT = re.compile(r'нажал[аи]?\s+клавишу', re.I)
+SEQUENCE_TEXT = re.compile(r'вв[её]л[аи]?\s+последовательность', re.I)
+DTMF_VALUE = re.compile(r'[0-9*#A-D]+')
+DTMF_LIKE = re.compile(r'тональн|нажал[аи]?\s+клавиш|последовательност', re.I)
+
+
+def plain(text):
+    return ' '.join(html.unescape(re.sub(r'<[^>]*>', ' ', text)).split())
+
+
+def mask_digits(text):
+    return re.sub(r'\d{5,}', lambda m: '***' + m.group()[-4:], text)
+
+
+def parse_dtmf(text):
+    """Return (kind, value, party) or a reason string for an unparsed text."""
+    if not isinstance(text, str):
+        return 'unknown_text'
+    words = plain(text)
+    kind = 'key' if KEY_TEXT.search(words) else 'sequence' if SEQUENCE_TEXT.search(words) else None
+    bold = [plain(b) for b in BOLD.findall(text)]
+    if kind is None or not bold:
+        return 'unknown_text'
+    value = bold[-1].upper()
+    if not DTMF_VALUE.fullmatch(value) or (kind == 'key' and len(value) != 1):
+        return 'invalid_' + kind
+    party = mask_digits(bold[0]) if len(bold) > 1 else None
+    return kind, value, party
+
+
+def read_captures(paths, stdin):
+    """Yield (label, envelope-or-failure-reason) for JSON, JSON arrays and JSONL."""
+    for path in paths or ['-']:
+        name = 'stdin' if path == '-' else path
+        try:
+            if path == '-':
+                raw = stdin.buffer.read(MAX_INPUT + 1)
+            else:
+                with open(path, 'rb') as handle:
+                    raw = handle.read(MAX_INPUT + 1)
+        except OSError:
+            yield name, 'unreadable'
+            continue
+        if len(raw) > MAX_INPUT:
+            yield name, 'input_exceeds_16_MiB'
+            continue
+        try:
+            doc = json.loads(raw)
+        except ValueError:
+            doc = None
+            lines = raw.splitlines()
+        else:
+            lines = None
+        if isinstance(doc, list):
+            for index, item in enumerate(doc):
+                yield f'{name}[{index}]', item
+        elif lines is None:
+            yield name, doc
+        else:
+            for number, line in enumerate(lines, 1):
+                if not line.strip():
+                    continue
+                try:
+                    yield f'{name}:{number}', json.loads(line)
+                except ValueError:
+                    yield f'{name}:{number}', 'invalid_json'
+
+
+def detail_rows(capture):
+    """Return (call_id, events) or a failure reason; never treat failure as no keys."""
+    if isinstance(capture, str):
+        return capture
+    if not isinstance(capture, dict) or capture.get('schemaVersion') != 'uis.cli/v1':
+        return 'not_uis_envelope'
+    if capture.get('ok') is False:
+        code = (capture.get('error') or {}).get('code')
+        return 'error_envelope:' + (code if isinstance(code, str) else 'unknown')
+    data = capture.get('data')
+    detail = data.get('data') if isinstance(data, dict) else None
+    header = detail.get('header') if isinstance(detail, dict) else None
+    if (capture.get('ok') is not True or data.get('reduced') or not isinstance(header, dict)
+            or not isinstance(header.get('id'), (int, str)) or isinstance(header.get('id'), bool)):
+        return 'reduced_or_unsupported_detail'
+    try:
+        return header['id'], list(events(detail.get('grid')))
+    except (ShapeError, RecursionError):
+        return 'unsupported_event_tree'
+
+
+def dtmf_report(captures, summary=False):
+    calls, failed, unparsed, seen = {}, [], [], set()
+    duplicates = 0
+    count = 0
+    for label, capture in captures:
+        count += 1
+        result = detail_rows(capture)
+        if isinstance(result, str):
+            failed.append({'capture': label, 'reason': result})
+            continue
+        call_id, rows = result
+        call = calls.setdefault(call_id, [])
+        for path, row in rows:
+            time = row.get('event_time')
+            is_dtmf = row.get('event_mnemonic') == 'dtmf'
+            if not is_dtmf:
+                hint = ' '.join(str(row.get(k) or '') for k in ('event_name', 'event_text'))
+                if not DTMF_LIKE.search(hint):
+                    continue
+            key = (call_id, path, time)
+            if key in seen:
+                duplicates += 1
+                continue
+            seen.add(key)
+            parsed = parse_dtmf(row.get('event_text')) if is_dtmf else 'dtmf_like_without_mnemonic'
+            if isinstance(parsed, str):
+                text = row.get('event_text')
+                unparsed.append({'call_id': call_id, 'path': path, 'time': time, 'reason': parsed,
+                                 'text': mask_digits(plain(text))[:200] if isinstance(text, str) else None})
+                continue
+            kind, value, party = parsed
+            call.append({'time': time, 'path': path, 'kind': kind, 'value': value, 'party': party})
+    key_counts, calls_by_key, sequence_counts = {}, {}, {}
+    for items in calls.values():
+        for item in items:
+            target = key_counts if item['kind'] == 'key' else sequence_counts
+            target[item['value']] = target.get(item['value'], 0) + 1
+        for value in {i['value'] for i in items if i['kind'] == 'key'}:
+            calls_by_key[value] = calls_by_key.get(value, 0) + 1
+    complete = not failed and not unparsed
+    out = {'ok': True, 'projection': 'dtmf', 'complete': complete, 'captures': count,
+           'calls_scanned': len(calls), 'calls_with_dtmf': sum(1 for v in calls.values() if v),
+           'key_counts': dict(sorted(key_counts.items())),
+           'calls_by_key': dict(sorted(calls_by_key.items())),
+           'sequence_counts': dict(sorted(sequence_counts.items())),
+           'duplicate_events': duplicates, 'failed': failed, 'unparsed': unparsed}
+    if not summary:
+        out['calls_without_dtmf'] = [k for k, v in calls.items() if not v]
+        out['calls'] = [{'call_id': k, 'dtmf': v} for k, v in calls.items() if v]
+    return out, 0 if complete else 1
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('mode', choices=['search', 'details', 'fields', 'filters'])
+    parser.add_argument('mode', choices=['search', 'details', 'fields', 'filters', 'dtmf'])
+    parser.add_argument('paths', nargs='*', help='dtmf only: detail captures (JSON, JSON array or JSONL); - is stdin')
+    parser.add_argument('--summary', action='store_true', help='dtmf only: omit per-call lists')
     parser.add_argument('--field', help='exact catalog field ID (required for filters)')
     parser.add_argument('--values', action='store_true', help='include one bounded field value page')
     parser.add_argument('--offset', type=int, default=0)
@@ -164,6 +309,12 @@ def main():
         parser.error('use offset >=0, limit 1..100, and --field for filters')
     if args.mode == 'fields' and (args.field or args.values):
         parser.error('fields lists descriptors; use filters --field for values')
+    if args.mode != 'dtmf' and (args.paths or args.summary):
+        parser.error('file paths and --summary apply only to dtmf')
+    if args.mode == 'dtmf':
+        out, code = dtmf_report(read_captures(args.paths, sys.stdin), args.summary)
+        print(json.dumps(out, ensure_ascii=False, allow_nan=False, separators=(',', ':')))
+        return code
     try:
         raw = sys.stdin.buffer.read(MAX_INPUT + 1)
         if len(raw) > MAX_INPUT:

@@ -145,6 +145,112 @@ class BriefTests(unittest.TestCase):
         self.assertFalse(out['ok'])
 
 
+def detail(call_id, grid, **extra):
+    return envelope({'source': 'private.app', **extra,
+                     'data': {'header': {'id': call_id}, 'grid': grid}})
+
+
+def dtmf_event(time, text, **extra):
+    return {'event_time': time, 'event_mnemonic': 'dtmf', 'event_name': 'Тональный набор',
+            'event_text': text, 'event_type': 'talk', **extra}
+
+
+def run_dtmf(*args, stdin=''):
+    proc = subprocess.run([sys.executable, str(ROOT / 'scripts/call_brief.py'), 'dtmf', *args],
+                          input=stdin, text=True, capture_output=True)
+    return proc.returncode, json.loads(proc.stdout)
+
+
+class DtmfTests(unittest.TestCase):
+    CALL_A = detail(101, [
+        {'event_text': 'Входящий звонок', 'data': [
+            dtmf_event('09:30:56', '<b>Иванова Анна, 0590001</b> нажал клавишу <b>#</b>'),
+            dtmf_event('09:30:59', '<b>Иванова Анна, 0590001</b> ввёл последовательность <b>2693</b>',
+                       event_type='wait')]}])
+    CALL_B = detail(102, [
+        {'event_text': 'Автообзвон', 'data': [
+            {'event_text': 'Соединение', 'childNode': [
+                dtmf_event('09:34:24', '<b>79161234567</b> нажал клавишу <b>2</b>')]}]},
+        {'event_mnemonic': 'finish', 'event_text': 'Абонент завершил звонок'}])
+    CALL_C = detail(103, [{'event_mnemonic': 'talk', 'event_text': 'Разговор'}])
+
+    def test_counts_nested_keys_sequences_and_masks_parties(self):
+        payload = json.dumps([self.CALL_A, self.CALL_B, self.CALL_C])
+        code, out = run_dtmf(stdin=payload)
+        self.assertEqual(code, 0)
+        self.assertTrue(out['complete'])
+        self.assertEqual(out['calls_scanned'], 3)
+        self.assertEqual(out['calls_with_dtmf'], 2)
+        self.assertEqual(out['key_counts'], {'#': 1, '2': 1})
+        self.assertEqual(out['calls_by_key'], {'#': 1, '2': 1})
+        self.assertEqual(out['sequence_counts'], {'2693': 1})
+        self.assertEqual(out['calls_without_dtmf'], [103])
+        calls = {c['call_id']: c for c in out['calls']}
+        self.assertEqual(calls[101]['dtmf'], [
+            {'time': '09:30:56', 'path': '/0/data/0', 'kind': 'key', 'value': '#',
+             'party': 'Иванова Анна, ***0001'},
+            {'time': '09:30:59', 'path': '/0/data/1', 'kind': 'sequence', 'value': '2693',
+             'party': 'Иванова Анна, ***0001'}])
+        self.assertEqual(calls[102]['dtmf'][0]['path'], '/0/data/0/childNode/0')
+        self.assertEqual(calls[102]['dtmf'][0]['value'], '2')
+        rendered = json.dumps(out, ensure_ascii=False)
+        self.assertNotIn('0590001', rendered)
+        self.assertNotIn('79161234567', rendered)
+        self.assertEqual(out['failed'], [])
+        self.assertEqual(out['unparsed'], [])
+
+    def test_duplicate_captures_and_jsonl_files_are_counted_once(self):
+        with tempfile.TemporaryDirectory() as temp:
+            first = Path(temp) / 'a.json'
+            first.write_text(json.dumps(self.CALL_B))
+            lines = Path(temp) / 'b.jsonl'
+            lines.write_text('\n'.join(json.dumps(x) for x in [self.CALL_B, self.CALL_A]) + '\n')
+            code, out = run_dtmf(str(first), str(lines))
+        self.assertEqual(code, 0)
+        self.assertEqual(out['captures'], 3)
+        self.assertEqual(out['calls_scanned'], 2)
+        self.assertEqual(out['duplicate_events'], 1)
+        self.assertEqual(out['key_counts'], {'#': 1, '2': 1})
+
+    def test_failed_captures_are_listed_never_zero(self):
+        failed = {'schemaVersion': 'uis.cli/v1', 'ok': False, 'error': {
+            'code': 'provider_error', 'message': 'private-body',
+            'details': {'stage': 'cabinet_transport'}}}
+        reduced = detail(105, [], reduced=True)
+        no_grid = envelope({'source': 'private.app', 'data': {'header': {'id': 107}}})
+        stdin = '\n'.join([json.dumps(self.CALL_B), json.dumps(failed),
+                           json.dumps(reduced), '{not json', json.dumps(no_grid)])
+        code, out = run_dtmf('-', '/nonexistent/detail.json', stdin=stdin)
+        self.assertEqual(code, 1)
+        self.assertFalse(out['complete'])
+        self.assertEqual(out['calls_scanned'], 1)
+        self.assertEqual(out['key_counts'], {'2': 1})
+        reasons = [(f['capture'], f['reason']) for f in out['failed']]
+        self.assertEqual(reasons, [
+            ('stdin:2', 'error_envelope:provider_error'),
+            ('stdin:3', 'reduced_or_unsupported_detail'),
+            ('stdin:4', 'invalid_json'),
+            ('stdin:5', 'unsupported_event_tree'),
+            ('/nonexistent/detail.json', 'unreadable')])
+        self.assertNotIn('private-body', json.dumps(out))
+
+    def test_unknown_dtmf_text_is_reported_unparsed(self):
+        call = detail(106, [
+            dtmf_event('10:00:00', 'Абонент 79161234567 что-то сделал'),
+            dtmf_event('10:00:01', '<b>Иван</b> нажал клавишу <b>12</b>'),
+            {'event_time': '10:00:02', 'event_name': 'Тональный набор',
+             'event_text': '<b>Иван</b> нажал клавишу <b>5</b>'}])
+        code, out = run_dtmf(stdin=json.dumps(call))
+        self.assertEqual(code, 1)
+        self.assertFalse(out['complete'])
+        self.assertEqual(out['key_counts'], {})
+        self.assertEqual(out['calls_with_dtmf'], 0)
+        self.assertEqual([(u['path'], u['reason']) for u in out['unparsed']], [
+            ('/0', 'unknown_text'), ('/1', 'invalid_key'), ('/2', 'dtmf_like_without_mnemonic')])
+        self.assertNotIn('79161234567', json.dumps(out))
+        self.assertEqual(out['unparsed'][0]['text'], 'Абонент ***4567 что-то сделал')
+
+
 class BundleTests(unittest.TestCase):
     def test_packaged_skill_has_its_recursive_dependencies_and_helper(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -153,6 +259,7 @@ class BundleTests(unittest.TestCase):
                                    '--output', str(output)], capture_output=True, text=True)
             self.assertEqual(proc.returncode, 0, proc.stderr)
             self.assertTrue((output / 'docs/TRANSFER_INVESTIGATION.md').is_file())
+            self.assertTrue((output / 'docs/AUTH_SELF_HEAL.md').is_file())
             self.assertTrue((output / 'docs/research/05-private-call-search-live.md').is_file())
             self.assertTrue((output / '.agents/skills/verify-uis-cli/features/staff-diagnostics.md').is_file())
             self.assertTrue((output / '.agents/skills/verify-uis-cli/scripts/verify.py').stat().st_mode & 0o111)
