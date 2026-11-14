@@ -473,7 +473,7 @@ func newCalls(g *globalFlags) *cobra.Command {
 		if action == "search" {
 			c.Flags().String("source", "auto", "Read source: auto, private, dataapi")
 			c.Flags().Bool("analysis", false, "Include duration, call type and raw MAV evidence (private only)")
-			c.Flags().Bool("all", false, "Read bounded private pages (150s / 50000 rows; inspect coverage)")
+			c.Flags().Bool("all", false, "Read bounded private pages (150s / 50000 rows; default sort communication_id asc; inspect coverage)")
 			c.Flags().Int("max-pages", 25, "Maximum private pages with --all (1–100)")
 			c.Flags().String("employee", "", "Cabinet employee name (private)")
 			c.Flags().String("scenario", "", "Cabinet scenario name (private)")
