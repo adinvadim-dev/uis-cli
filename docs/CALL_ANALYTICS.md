@@ -46,7 +46,21 @@ FILTER_JSON=$(python3 -c 'import json,sys; print(json.dumps({"field":"employee_p
 Observed live 2026-11-10: `=` and `like` on an outbound employee number returned
 the same total; `employees like <number>` returned 0. Confirm operators with
 `call_brief.py filters --field employee_phone_number` over a saved `filters list`
-capture. An empty result is “no calls in this window”, not “number unknown”.
+capture. UIS sends no total for an empty set, so an empty export comes back as
+`returned: 0`, `complete: false`, `reason: provider_count_unavailable`. Say
+“UIS returned no calls for this number in this window; it does not confirm the
+total”, not “0 calls”, and keep that day out of any total reported as complete.
+An empty result does not mean the number is unknown.
+
+Export one cabinet day per `--all` call. A multi-day window can exceed the
+provider or 150-second bound and fail as `provider_error` (`stage:
+cabinet_transport`); split it by day, add only days with `complete: true`, and
+list the other days with their reason.
+
+“Did anyone call this phone back?” needs the same coverage: run
+`calls search --source private --phone <number> --analysis --all` over a closed
+window and check `coverage.complete`. One `--limit` page, or a missing capture
+file, is not proof that no call happened.
 
 ## Keypresses (DTMF)
 
