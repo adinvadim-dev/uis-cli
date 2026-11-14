@@ -303,8 +303,12 @@ field projection. The raw MAV flag is not a classifier. `--all` requires explici
 `--from` and `--till`, without `--date-hint`, and accepts `--max-pages 1..100`
 (default 25). It has independent 50,000-row and 150-second bounds. Complete
 coverage requires offset zero and exhaustion of the stable reported total;
-page/row caps return an incomplete result and `next_offset`. Drift, duplicate
-IDs and short pages fail closed. Source fallback and implicit refresh remain
+page/row caps return an incomplete result and `next_offset`. Without `--sort`,
+`--all` pages by `communication_id asc`: start time is not unique, so offset pages
+over it repeat or skip calls. Drift, duplicate IDs and short pages fail closed
+with exit 7; JSON keeps the generic exit-7 message and names the case in
+`error.details.reason` (`population_changed`, `repeated_communication_id`,
+`count_mismatch`, `short_page`) with `pages_read`, `rows_discarded` and `hint`. Source fallback and implicit refresh remain
 unavailable for these flags. Dates keep literal cabinet wall-time semantics.
 The [employee comparison recipe](OPERATOR_COMPARISON.md) and linked offline
 helper explain two-CLI identity binding and the separate populations.

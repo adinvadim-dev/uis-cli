@@ -113,6 +113,13 @@ func privateCallQuery(cmd *cobra.Command, from, till string, limit, offset int) 
 	}
 	sort, _ := cmd.Flags().GetString("sort")
 	order, _ := cmd.Flags().GetString("order")
+	// Start time is not unique, so offset pages over it repeat or skip calls; --all defaults to the unique ID.
+	if all, _ := cmd.Flags().GetBool("all"); all && !cmd.Flags().Changed("sort") {
+		sort = "communication_id"
+		if !cmd.Flags().Changed("order") {
+			order = "asc"
+		}
+	}
 	if sort != "call_start_date_time" && sort != "communication_id" {
 		return q, exitf(2, "Private sort must be call_start_date_time or communication_id")
 	}
@@ -178,6 +185,12 @@ func collectPrivateCalls(g *globalFlags, cmd *cobra.Command, c *portal.Client, q
 	var total *int64
 	initialOffset, pages := q.Offset, 0
 	ended, reason := false, "page_limit"
+	// JSON output replaces exit-7 messages with a generic one; the reason must survive in details.
+	unstable := func(reason, msg string) *ExitError {
+		e := exitf(7, "%s", msg)
+		e.Details = map[string]interface{}{"reason": reason, "pages_read": pages, "rows_discarded": len(rows), "hint": "The call set moved during --all; nothing was returned. Rerun --all with --sort communication_id --order asc over a closed window, or report the count as unavailable. Not an auth or capability problem; do not page manually with --offset."}
+		return e
+	}
 	for pages < maxPages && len(rows) < 50000 {
 		if remaining := 50000 - len(rows); q.Limit > remaining {
 			q.Limit = remaining
@@ -188,7 +201,7 @@ func collectPrivateCalls(g *globalFlags, cmd *cobra.Command, c *portal.Client, q
 		}
 		pages++
 		if total != nil && page.Metadata.Total != nil && *total != *page.Metadata.Total {
-			return exitf(7, "Call population changed between pages; retain previous snapshot and retry")
+			return unstable("population_changed", "Call population changed between pages; retain previous snapshot and retry")
 		}
 		if page.Metadata.Total != nil {
 			total = page.Metadata.Total
@@ -196,14 +209,14 @@ func collectPrivateCalls(g *globalFlags, cmd *cobra.Command, c *portal.Client, q
 		for _, row := range page.Data {
 			id := string(row["communication_id"].(json.Number)) // SearchCalls validates identity.
 			if seen[id] {
-				return exitf(7, "Repeated communication ID across pages; population is unstable")
+				return unstable("repeated_communication_id", "Repeated communication ID across pages; population is unstable")
 			}
 			seen[id] = true
 			rows = append(rows, row)
 		}
 		q.Offset += len(page.Data)
 		if total != nil && int64(q.Offset) > *total {
-			return exitf(7, "Provider count disagrees with returned call rows")
+			return unstable("count_mismatch", "Provider count disagrees with returned call rows")
 		}
 		if total != nil && int64(q.Offset) == *total {
 			ended, reason = true, "provider_count_reached"
@@ -211,7 +224,7 @@ func collectPrivateCalls(g *globalFlags, cmd *cobra.Command, c *portal.Client, q
 		}
 		if len(page.Data) < q.Limit {
 			if total != nil {
-				return exitf(7, "Short call page before provider count; population is incomplete")
+				return unstable("short_page", "Short call page before provider count; population is incomplete")
 			}
 			reason = "provider_count_unavailable"
 			break

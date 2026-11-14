@@ -18,9 +18,15 @@ window and filters in the answer.
 Read `data.coverage`: a total is reportable only when `complete` is true. With
 `complete: false`, report `returned`, `reported_total`, `reason` and
 `next_offset` as an incomplete count. A drift, duplicate-ID or short-page error
-means the provider total moved during the read: report it; a rerun is a new
-observation with its own collection time. `--all` replaces manual `--offset`
-paging, which has no snapshot guarantee. See
+means the provider total moved during the read. In `--json` it arrives as exit 7
+`capability_unavailable` with `error.details.reason` (`population_changed`,
+`repeated_communication_id`, `count_mismatch`, `short_page`): it is not an auth
+or missing-feature error, so do not refresh the session. Rerun once with
+`--sort communication_id --order asc`; for today, end `--till` a few minutes in
+the past. If it fails again, report the count as unavailable with the reason; a
+rerun is a new observation with its own collection time. `--all` replaces
+manual `--offset` paging, which has no snapshot guarantee; never fall back to it
+for a total. See
 [bounded private paging](CLI_SPEC.md#operator-analysis-fields-and-bounded-private-paging).
 
 ## Calls of a robot or outbound number

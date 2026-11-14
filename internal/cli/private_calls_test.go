@@ -266,6 +266,9 @@ func TestPrivateAnalysisPagination(t *testing.T) {
 						t.Fatalf("analysis evidence field missing: %s", field)
 					}
 				}
+				if len(q.Sort) != 1 || q.Sort[0].Field != "communication_id" || q.Sort[0].Order != "asc" {
+					t.Fatalf("--all without --sort must page by unique ID: %+v", q.Sort)
+				}
 				id, total := q.Offset+1, 2
 				if mode == "duplicate" {
 					id = 1
@@ -299,6 +302,10 @@ func TestPrivateAnalysisPagination(t *testing.T) {
 				var ee *ExitError
 				if !errors.As(result, &ee) || ee.Code != 7 {
 					t.Fatalf("unstable population accepted: %v", result)
+				}
+				want := map[string]string{"drift": "population_changed", "duplicate": "repeated_communication_id", "short": "short_page"}[mode]
+				if ee.Details["reason"] != want || ee.Details["hint"] == nil {
+					t.Fatalf("unstable population must name its reason for JSON callers: %+v", ee.Details)
 				}
 				return
 			}
