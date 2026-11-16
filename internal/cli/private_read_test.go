@@ -25,6 +25,8 @@ type refreshFixture struct {
 	logins, reports, posts int
 	failLogin, rejectAll   bool
 	sessionPath            string
+	reportBody             string                      // report-constructor success body
+	routes                 map[string]http.HandlerFunc // extra host+path handlers
 }
 
 func newRefreshFixture(t *testing.T) *refreshFixture {
@@ -38,10 +40,14 @@ func newRefreshFixture(t *testing.T) *refreshFixture {
 	if err := profile.Save(profile.Path(), profile.Config{DefaultAccount: "fixture", Accounts: map[string]profile.Account{"fixture": a}}); err != nil {
 		t.Fatal(err)
 	}
-	f := &refreshFixture{t: t, sessionPath: filepath.Join(profile.State("fixture"), "session.json")}
+	f := &refreshFixture{t: t, sessionPath: filepath.Join(profile.State("fixture"), "session.json"), routes: map[string]http.HandlerFunc{}}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "POST" {
 			f.posts++
+		}
+		if h := f.routes[r.Host+r.URL.Path]; h != nil {
+			h(w, r)
+			return
 		}
 		switch r.Host + r.URL.Path {
 		case "www.uiscom.ru/api/":
@@ -74,7 +80,11 @@ func newRefreshFixture(t *testing.T) *refreshFixture {
 				http.Error(w, "expired", 401)
 				return
 			}
-			fmt.Fprint(w, `{"data":[{"communication_id":123}],"metadata":{"total_items":1}}`)
+			body := f.reportBody
+			if body == "" {
+				body = `{"data":[{"communication_id":123}],"metadata":{"total_items":1}}`
+			}
+			fmt.Fprint(w, body)
 		default:
 			t.Errorf("unexpected wire request %s %s", r.Method, r.Host+r.URL.Path)
 			http.Error(w, "unexpected", 500)

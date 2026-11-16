@@ -159,7 +159,7 @@ Never fabricate ticket IDs (ignore cabinet `Date.now()` fallback). Require provi
 | `calls comment <session-id>` | `create.communication_comment` once; confirm text. | Live mutation |
 | `calls tag <session-id> --add|--remove <tag-id>` | `set`/`unset.tag_communications`; confirm. | Live mutation |
 
-Recording playback URLs stay inside adapters; `recording download` writes bytes to an explicit path after identity checks.
+Recording playback URLs stay inside adapters; `recording download <communication_id> --output PATH [--leg all|N]` writes bytes to an explicit path after identity checks (implemented; see README “Recordings”).
 
 ### `filters` / `reports`
 
