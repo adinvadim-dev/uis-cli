@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -65,34 +64,8 @@ func newAuthCmd(g *globalFlags) *cobra.Command {
 				return emit(g, map[string]interface{}{"account": name, "logged_out": true})
 			default:
 				if surface == "private" {
-					if portal.NormalizeLogin(a.ExpectedLogin) == "" {
-						return exitf(3, "Configure expected_login before private login")
-					}
-					if a.ExpectedCustomerID != "" {
-						return exitf(7, "Customer identity probe unavailable; previous session preserved")
-					}
-					to, err := timeout(g)
-					if err != nil {
+					if err := refreshPrivateSession(cmd.Context(), g, name, a); err != nil {
 						return err
-					}
-					ctx := cmd.Context()
-					fields, err := profile.Resolve(ctx, a, "portal.login", "portal.password")
-					if err != nil {
-						return exitf(3, "%s", err)
-					}
-					err = portal.LoginAndPromote(ctx, profile.State(name), a.ExpectedLogin, a.ExpectedCustomerID, fields["portal.login"], fields["portal.password"], to, func() (string, error) {
-						f, e := profile.Resolve(ctx, a, "captcha.2captcha_api_key")
-						if e != nil {
-							return "", exitf(3, "%s", e)
-						}
-						return f["captcha.2captcha_api_key"], nil
-					})
-					if err != nil {
-						var ce *portal.CaptchaError
-						if errors.As(err, &ce) {
-							return exitf(6, "%s", ce)
-						}
-						return operationError(err)
 					}
 					return emit(g, map[string]interface{}{"account": name, "surface": "private", "promoted": true, "binding": "credential_login_and_authenticated_read"})
 				}

@@ -433,13 +433,21 @@ func newCalls(g *globalFlags) *cobra.Command {
 			}
 			if action == "show" && !g.DryRun {
 				reason := "private_session_unavailable"
-				pc, e := privateClient(g)
-				if e == nil {
-					v, err := pc.Call(context.Background(), args[0])
-					if err == nil {
+				// An absent session keeps the reduced Data API fallback without a login.
+				if pc, e := selectCallClient(g, "auto"); pc != nil || e != nil {
+					called := false
+					var v interface{}
+					if e = retryPrivateRead(cmd.Context(), g, pc, e, func(c *portal.Client) error {
+						called = true
+						var err error
+						v, err = c.Call(cmd.Context(), args[0])
+						return err
+					}); e == nil {
 						return emit(g, map[string]interface{}{"source": "private.call_details_data", "data": archive.Scrub(v)})
 					}
-					reason = "private_details_unavailable"
+					if called {
+						reason = "private_details_unavailable"
+					}
 				}
 				v, e := rpc(g, method, p)
 				if e != nil {
@@ -534,12 +542,10 @@ func newSupport(g *globalFlags) *cobra.Command {
 			}
 			defer s.Close()
 			if a == "sync" {
-				pc, e := privateClient(g)
-				if e != nil {
+				if e = privateRead(cmd.Context(), g, func(pc *portal.Client) error {
+					return s.Sync(cmd.Context(), supportSource{pc})
+				}); e != nil {
 					return e
-				}
-				if e = s.Sync(context.Background(), supportSource{pc}); e != nil {
-					return operationError(e)
 				}
 			}
 			v, e := s.Status()
@@ -556,10 +562,6 @@ func newSupport(g *globalFlags) *cobra.Command {
 			if g.DryRun {
 				return emit(g, map[string]interface{}{"resource": kind, "network": false})
 			}
-			pc, e := privateClient(g)
-			if e != nil {
-				return e
-			}
 			resource := "contact"
 			q := url.Values{}
 			if kind == "topic" {
@@ -568,9 +570,13 @@ func newSupport(g *globalFlags) *cobra.Command {
 				q.Set("is_available", "true")
 				q.Set("is_active_customer", "true")
 			}
-			v, e := pc.Read(context.Background(), resource, q)
-			if e != nil {
-				return operationError(e)
+			var v interface{}
+			if e := privateRead(cmd.Context(), g, func(pc *portal.Client) error {
+				var err error
+				v, err = pc.Read(cmd.Context(), resource, q)
+				return err
+			}); e != nil {
+				return e
 			}
 			return emit(g, archive.Scrub(v))
 		}})
@@ -655,21 +661,19 @@ func newSupport(g *globalFlags) *cobra.Command {
 			var s *archive.Store
 			var v interface{}
 			if live {
-				pc, e := privateClient(g)
-				if e != nil {
-					return e
-				}
-				if action == "show" {
-					t, err := pc.Ticket(context.Background(), args[0])
-					if err != nil {
-						return operationError(err)
+				e = privateRead(cmd.Context(), g, func(pc *portal.Client) error {
+					if action == "show" {
+						t, err := pc.Ticket(cmd.Context(), args[0])
+						if err != nil {
+							return err
+						}
+						comments, err := pc.Comments(cmd.Context(), t, 0, 0)
+						if err != nil {
+							return err
+						}
+						v = map[string]interface{}{"ticket": t, "comments": comments}
+						return nil
 					}
-					comments, err := pc.Comments(context.Background(), t, 0, 0)
-					if err != nil {
-						return operationError(err)
-					}
-					v = map[string]interface{}{"ticket": t, "comments": comments}
-				} else {
 					// Live list rejects offset/limit/status query params; _q works.
 					// Fetch the working unfiltered (or _q) set and page/filter locally.
 					if action == "search" {
@@ -679,16 +683,17 @@ func newSupport(g *globalFlags) *cobra.Command {
 					if query != "" {
 						q.Set("_q", query)
 					}
-					raw, err := pc.Read(context.Background(), "tech-support", q)
+					raw, err := pc.Read(cmd.Context(), "tech-support", q)
 					if err != nil {
-						return operationError(err)
+						return err
 					}
 					rows, err := portal.Rows(raw)
 					if err != nil {
-						return operationError(err)
+						return err
 					}
 					v = pageObjects(rows, status, "", limit, page)
-				}
+					return nil
+				})
 			} else {
 				s, e = archive.Open(profile.State(name))
 				if e != nil {
@@ -765,13 +770,14 @@ func newDiscovery(g *globalFlags, use string, methods map[string]string) *cobra.
 					return emit(g, portal.Object{"source": source, "method": method, "params": p, "network": false})
 				}
 				pc, err := selectCallClient(g, source)
-				if err != nil {
-					return err
-				}
-				if pc != nil {
-					v, err := pc.DiscoverCalls(cmd.Context(), method, t)
-					if err != nil {
-						return operationError(err)
+				if pc != nil || err != nil {
+					var v interface{}
+					if err = retryPrivateRead(cmd.Context(), g, pc, err, func(c *portal.Client) error {
+						var re error
+						v, re = c.DiscoverCalls(cmd.Context(), method, t)
+						return re
+					}); err != nil {
+						return err
 					}
 					return emit(g, portal.Object{"source": "private.cabinet_rpc", "data": archive.Scrub(v)})
 				}

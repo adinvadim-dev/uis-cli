@@ -90,27 +90,35 @@ func newStaff(g *globalFlags) *cobra.Command {
 						return e
 					}
 				}
-				c, e := privateClient(g)
-				if e != nil {
-					return e
-				}
 				var v portal.Object
-				switch action {
-				case "list":
-					v, e = c.StaffList(cmd.Context(), resource, employeeID)
-				case "update":
-					v, e = c.StaffUpdate(cmd.Context(), resource, id, patch)
-				case "groups":
-					v, e = c.StaffGroups(cmd.Context(), id)
-				case "get":
-					if resource == "softphone" {
-						v, e = c.StaffSoftphone(cmd.Context(), id)
-					} else {
-						v, e = c.StaffGet(cmd.Context(), resource, id)
+				if action == "update" {
+					// Writes never refresh or replay; keep outcome_unknown semantics.
+					c, e := privateClient(g)
+					if e != nil {
+						return e
 					}
+					if v, e = c.StaffUpdate(cmd.Context(), resource, id, patch); e != nil {
+						return operationError(e)
+					}
+					return emit(g, v)
 				}
-				if e != nil {
-					return operationError(e)
+				if e := privateRead(cmd.Context(), g, func(c *portal.Client) error {
+					var re error
+					switch action {
+					case "list":
+						v, re = c.StaffList(cmd.Context(), resource, employeeID)
+					case "groups":
+						v, re = c.StaffGroups(cmd.Context(), id)
+					case "get":
+						if resource == "softphone" {
+							v, re = c.StaffSoftphone(cmd.Context(), id)
+						} else {
+							v, re = c.StaffGet(cmd.Context(), resource, id)
+						}
+					}
+					return re
+				}); e != nil {
+					return e
 				}
 				return emit(g, v)
 			}}

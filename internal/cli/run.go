@@ -54,12 +54,11 @@ func Run(args []string) int {
 		}
 		jsonOutput, _ := cmd.PersistentFlags().GetBool("json")
 		if jsonOutput {
-			names := map[int]string{1: "execution_failed", 2: "invalid_usage", 3: "authentication_required", 4: "permission_denied", 5: "not_found", 6: "provider_error", 7: "capability_unavailable", 8: "rate_limited", 9: "outcome_unknown", 10: "confirmation_required"}
 			details := map[string]interface{}{}
 			if ee != nil && ee.Details != nil {
 				details = ee.Details
 			}
-			b, _ := json.Marshal(map[string]interface{}{"ok": false, "schemaVersion": "uis.cli/v1", "command": strings.TrimPrefix(executed.CommandPath(), "uis "), "error": map[string]interface{}{"code": names[code], "message": safeError(code), "details": details}})
+			b, _ := json.Marshal(map[string]interface{}{"ok": false, "schemaVersion": "uis.cli/v1", "command": strings.TrimPrefix(executed.CommandPath(), "uis "), "error": map[string]interface{}{"code": exitCodeNames[code], "message": safeError(code), "details": details}})
 			fmt.Fprintln(os.Stdout, string(b))
 		} else {
 			fmt.Fprintln(os.Stderr, err.Error())

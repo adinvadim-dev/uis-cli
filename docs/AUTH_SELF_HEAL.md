@@ -26,6 +26,8 @@ Staff/cabinet reads can succeed while **private call search** fails: `staff empl
 
 ## Repair (once)
 
+Private reads now self-heal once automatically: when the account has a credential_process, the CLI performs this private refresh in-process and retries the read once before failing (never for writes or principal mismatch; `UIS_NO_AUTO_REFRESH=1` disables). If `error.details.auto_refresh.attempted` is true, the automatic refresh already ran; go straight to login below, not another refresh.
+
 Use the configured account name and its `expected_login`, never an agent alias.
 
 ```sh
