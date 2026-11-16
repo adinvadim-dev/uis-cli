@@ -87,8 +87,15 @@ func newRecording(g *globalFlags) *cobra.Command {
 				if len(legs) > 1 {
 					paths[n] = legPath(output, n)
 				}
-				if _, e := os.Lstat(paths[n]); e == nil && !g.Force {
-					return outputExists(paths[n])
+				if fi, e := os.Lstat(paths[n]); e == nil {
+					if !g.Force {
+						return outputExists(paths[n])
+					}
+					// --force replaces regular files only; reject every unusable
+					// destination before publishing any leg.
+					if !fi.Mode().IsRegular() {
+						return exitf(2, "Output path exists and is not a regular file: %s", paths[n])
+					}
 				}
 			}
 			// Download every leg to private temp files first so a failure leaves

@@ -225,6 +225,25 @@ func TestRecordingDownloadRefusesOverwriteWithoutForce(t *testing.T) {
 	}
 }
 
+func TestRecordingDownloadForceRejectsUnusableLegBeforeReplacingAny(t *testing.T) {
+	f := newRecordingFixture(t, []string{"1:10", "2:20"}, []string{link("123", "locator-secret-1"), link("123", "locator-secret-2")})
+	dir := t.TempDir()
+	leg1 := filepath.Join(dir, "call.leg1.mp3")
+	if err := os.WriteFile(leg1, []byte("keep me"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "call.leg2.mp3"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	r := f.download("--force", "--output", filepath.Join(dir, "call.mp3"))
+	if b, _ := os.ReadFile(leg1); r.code == 0 || string(b) != "keep me" || f.media != 0 {
+		t.Fatalf("exit=%d media=%d leg1=%q %s", r.code, f.media, b, r.out)
+	}
+	if names := dirEntries(t, dir); len(names) != 2 {
+		t.Fatalf("left temp files: %v", names)
+	}
+}
+
 func TestRecordingDownloadRefreshesExpiredSessionOnce(t *testing.T) {
 	f := newRecordingFixture(t, []string{"1:10"}, []string{link("123", "locator-secret-1")})
 	f.writeSession(staleSession)
