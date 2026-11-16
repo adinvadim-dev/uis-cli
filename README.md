@@ -47,7 +47,7 @@ uis --dry-run calls comment 123 --body 'Reviewed'
 uis --force calls tag 123 --add 456
 ```
 
-Search defaults to `--source auto`: an existing bound private session selects the cabinet report; otherwise the existing Data API path remains available. Use `--source private` for token-free cabinet search and `--source dataapi` for the original `get.calls_report` contract. An unavailable/expired private report session fails explicitly; refresh with `auth refresh --surface private --no-input`. Login captures separate app, support and cabinet JWT credentials. No Data API key is needed for private search or discovery.
+Search defaults to `--source auto`: an existing bound private session selects the cabinet report; otherwise the existing Data API path remains available. Use `--source private` for token-free cabinet search and `--source dataapi` for the original `get.calls_report` contract. An unavailable/expired private report session fails explicitly; refresh with `auth refresh --surface private --no-input`. Private reads now self-heal once automatically when the account has a credential_process (writes never; `UIS_NO_AUTO_REFRESH=1` disables). Login captures separate app, support and cabinet JWT credentials. No Data API key is needed for private search or discovery.
 
 ```sh
 uis --json calls search --source private --id 123 --from '2026-10-29 00:00:00' --till '2026-10-30 00:00:00'

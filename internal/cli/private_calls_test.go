@@ -176,6 +176,8 @@ func TestPrivateCallSearchRecoveryGuidance(t *testing.T) {
 			t.Setenv("UIS_CONFIG", filepath.Join(dir, "config.toml"))
 			t.Setenv("XDG_STATE_HOME", dir)
 			t.Setenv("UIS_TOKEN", "")
+			// Guidance without the read self-heal; private_read_test.go covers it.
+			t.Setenv(noAutoRefreshEnv, "1")
 			account := profile.Account{ExpectedLogin: "fixture@example.invalid"}
 			account.CredentialProcess.Command = []string{"/must/not/run"}
 			if err := profile.Save(profile.Path(), profile.Config{DefaultAccount: "fixture", Accounts: map[string]profile.Account{"fixture": account}}); err != nil {

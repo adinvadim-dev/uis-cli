@@ -95,7 +95,7 @@ Session files live under `$XDG_STATE_HOME/uis/accounts/<name>/` (fallback `~/.lo
 
 ## Principal and drift
 
-Private-session authentication failures include `auth refresh --surface private --no-input` in the recovery guidance. The default `auth login` / `auth refresh` surface is Data API and does not renew a cabinet session. Permission failures do not suggest reauthentication; recovery remains an explicit separate command.
+Private-session authentication failures include `auth refresh --surface private --no-input` in the recovery guidance. The default `auth login` / `auth refresh` surface is Data API and does not renew a cabinet session. Permission failures do not suggest reauthentication. Private reads now self-heal once automatically: on an expired, missing or unloadable session, an account with a credential_process runs the same in-process refresh as that command, promotes the session the same way and retries the read once; a failure keeps the original exit 3 and recovery plus `details.auto_refresh` (`attempted`, `outcome`, `error_code`). Mutations, principal mismatch and `UIS_NO_AUTO_REFRESH=1` never refresh automatically.
 
 Before any private mutation:
 

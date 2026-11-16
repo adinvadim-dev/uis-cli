@@ -127,13 +127,22 @@ func newAutodial(g *globalFlags) *cobra.Command {
 					return e
 				}
 			}
-			c, e := privateClient(g)
-			if e != nil {
+			var v interface{}
+			if r.Write {
+				// Writes never refresh or replay; keep outcome_unknown semantics.
+				c, e := privateClient(g)
+				if e != nil {
+					return e
+				}
+				if v, e = c.Autodial(cmd.Context(), dispatchAction, id, payload); e != nil {
+					return operationError(e)
+				}
+			} else if e := privateRead(cmd.Context(), g, func(c *portal.Client) error {
+				var re error
+				v, re = c.Autodial(cmd.Context(), dispatchAction, id, payload)
+				return re
+			}); e != nil {
 				return e
-			}
-			v, e := c.Autodial(cmd.Context(), dispatchAction, id, payload)
-			if e != nil {
-				return operationError(e)
 			}
 			return emit(g, portal.Object{"source": source, "data": archive.Scrub(v), "limitations": []string{"Source-observed private contract; no snapshot or completeness guarantee"}})
 		}}

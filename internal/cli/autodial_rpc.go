@@ -74,10 +74,10 @@ func runAutodialRPC(g *globalFlags, cmd *cobra.Command, method string, params ma
 		}
 	}
 	c, e := selectCallClient(g, source)
-	if e != nil {
+	if e != nil && write {
 		return true, e
 	}
-	if c == nil {
+	if c == nil && e == nil {
 		if write {
 			confirmed := *g
 			confirmed.Force = true
@@ -85,9 +85,18 @@ func runAutodialRPC(g *globalFlags, cmd *cobra.Command, method string, params ma
 		}
 		return false, nil
 	}
-	v, e := c.AutodialRPC(cmd.Context(), method, p)
-	if e != nil {
-		return true, operationError(e)
+	var v portal.Object
+	if write {
+		// Writes never refresh or replay; keep outcome_unknown semantics.
+		if v, e = c.AutodialRPC(cmd.Context(), method, p); e != nil {
+			return true, operationError(e)
+		}
+	} else if e = retryPrivateRead(cmd.Context(), g, c, e, func(c *portal.Client) error {
+		var re error
+		v, re = c.AutodialRPC(cmd.Context(), method, p)
+		return re
+	}); e != nil {
+		return true, e
 	}
 	// Keep result data/metadata at the same level as the key-based route, adding
 	// provenance so callers can use either source without confusing list shapes.
