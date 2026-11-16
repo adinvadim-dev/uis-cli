@@ -61,6 +61,15 @@ Private search combines flags and `--filter-json` with AND. It returns `source`,
 
 Details prefer an existing bound app session; fallback uses `get.calls_report`, verifies the requested session ID, and marks `source`, `reduced`, and `fallback_reason`. A missing call returns exit 5. Call details never start login or request recognition. Recording/download URLs are stripped from output.
 
+### Recordings
+
+```sh
+uis --json recording download 6107484423 --output /tmp/rec/6107484423.mp3
+uis --json recording download 6107484423 --leg 2 --output /tmp/rec/leg2.mp3
+```
+
+`recording download` resolves the call through private `call_details_data` (the returned header ID must equal the requested ID), reads the recording locators from the cabinet report's `call_records` column (each must carry the same call ID and a cabinet media host), and writes the audio bytes to the explicit `--output` path. With several legs, `--leg all` (default) writes `<name>.leg1<ext>`, `<name>.leg2<ext>`, …; `--leg N` writes leg N to the exact path. Output prints JSON metadata only (`communication_id`, `files[]` with path, bytes, sha256, content_type, leg, plus `legs_available` and `source`); locators, tokens and cookies are never printed. Files are created `0600`; an existing file is refused (exit 10) unless `--force`; nothing else is created and a failed download leaves no partial set. No recording → exit 5 `not_found` (`details.reason`: `no_recording`, `leg_not_found`, `call_not_in_report`). The resolve step is a private read with the one automatic session refresh. The media links are self-authorizing, so no session credential is sent with the download. The report column is slow (~15s); use `--timeout 60s` if a busy cabinet times out. Recording audio is personal data: keep files private and delete them after use. No recognition/transcription is requested from UIS.
+
 
 ## Support and offline archive
 
