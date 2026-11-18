@@ -256,3 +256,77 @@ func TestRecordingDownloadRefreshesExpiredSessionOnce(t *testing.T) {
 		t.Fatalf("bytes after refresh: %q", b)
 	}
 }
+
+func TestRecordingLinkDisclosure(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		args  []string
+		code  int
+		media int
+	}{
+		{"approval_required", nil, 10, 0},
+		{"one_leg", []string{"--audience-approved", "--leg", "2"}, 0, 1},
+		{"missing_leg", []string{"--audience-approved", "--leg", "3"}, 5, 0},
+		{"invalid_leg", []string{"--audience-approved", "--leg", "0"}, 2, 0},
+		{"dry_run", []string{"--dry-run"}, 0, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newRecordingFixture(t, []string{"1:2", "2:3"}, []string{link("123", "locator-secret-1"), link("123", "locator-secret-2")})
+			r := f.run(append([]string{"recording", "link", "123"}, tc.args...)...)
+			if r.code != tc.code || f.media != tc.media {
+				t.Fatalf("code=%d media=%d %s", r.code, f.media, r.out)
+			}
+			if tc.name == "one_leg" {
+				sum := sha256.Sum256([]byte(f.audio["locator-secret-2"]))
+				for _, want := range []string{link("123", "locator-secret-2"), hex.EncodeToString(sum[:]), `"expires_at":null`, "exact expiry unknown"} {
+					if !strings.Contains(r.out, want) {
+						t.Fatalf("missing %s: %s", want, r.out)
+					}
+				}
+				if strings.Contains(r.out, "locator-secret-1") {
+					t.Fatal("disclosed another leg")
+				}
+			} else if strings.Contains(r.out, "locator-secret") {
+				t.Fatal("disclosed without success")
+			}
+			for _, secret := range []string{"fresh-app", "fresh-cabinet", "fresh-go"} {
+				if strings.Contains(r.out, secret) {
+					t.Fatal("session credential disclosed")
+				}
+			}
+			if (tc.name == "approval_required" || tc.name == "dry_run" || tc.name == "invalid_leg") && f.details != 0 {
+				t.Fatal("guard performed network I/O")
+			}
+		})
+	}
+}
+
+func TestRecordingLinkRejectsUnavailableMedia(t *testing.T) {
+	for _, code := range []int{401, 403, 404, 410, 429, 500} {
+		t.Run(fmt.Sprint(code), func(t *testing.T) {
+			f := newRecordingFixture(t, []string{"1:2"}, []string{link("123", "locator-secret-1")})
+			f.routes[strings.TrimPrefix(link("123", "locator-secret-1"), "https://")] = func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(code) }
+			r := f.run("recording", "link", "123", "--audience-approved")
+			if r.code == 0 || strings.Contains(r.out, "locator-secret") {
+				t.Fatalf("unsafe result %s", r.out)
+			}
+		})
+	}
+}
+
+func TestRecordingLinkRejectsIdentityMismatch(t *testing.T) {
+	for _, tc := range []struct{ name, header, locator string }{
+		{"detail", "999", link("123", "locator-secret-1")},
+		{"locator", "123", link("999", "locator-secret-1")},
+		{"host", "123", "https://example.invalid/system/media/talk/123/locator-secret-1/"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newRecordingFixture(t, []string{"1:2"}, []string{tc.locator})
+			f.headerID = tc.header
+			r := f.run("recording", "link", "123", "--audience-approved")
+			if r.code != 7 || f.media != 0 || strings.Contains(r.out, "locator-secret") {
+				t.Fatalf("unsafe identity result code=%d %s", r.code, r.out)
+			}
+		})
+	}
+}

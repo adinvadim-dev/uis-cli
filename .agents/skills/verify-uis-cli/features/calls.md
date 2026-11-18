@@ -51,3 +51,30 @@ Preconditions: existing authorized profile/session, Data API credentials through
 - Local proof: `python3 -m unittest tests.test_skill_tools -k Dtmf -v`. For a live
   check, run it on protected captures of one known call with a keypress and
   compare `key_counts` with the cabinet timeline; record counts only.
+
+## Recording link disclosure
+
+- Entry: `recording link ID --leg N --audience-approved`; no approval refuses
+  before credentials/network, `--dry-run` returns a local plan without links.
+- Local protocol proof: `go test ./internal/cli -run 'TestRecording' -count=1`.
+  Covers selected-leg bytes/hash, audience guard, expired/unavailable media,
+  ID/host/schema guards and unchanged metadata-only download behavior.
+- Drive a freshly launched binary against one already authorized recording.
+  Keep JSON/URLs/audio in private scratch. Compare the link response SHA-256
+  with `recording download ID --leg N`; independently GET the returned URL
+  without credentials and compare bytes/hash. Never send that URL as proof.
+- Expiry is provider retention, exact date unknown. Simulated 404/410 proof is
+  separate from live expiry. No production mutation or external recipient needed.
+
+## Recording link disclosure
+
+- Entry points: `recording link ID --leg N --audience-approved`, missing approval,
+  dry-run, invalid/missing leg, unavailable/expired media, mismatched identity.
+- Local protocol proof: `go test ./internal/cli -run TestRecordingLink -count=1`.
+  Tests assert credential-free media GET, selected bytes/hash, one-link disclosure,
+  offline guards, rejected hosts/IDs and no URL on provider failures.
+- Live read proof: use the launched binary on one authorized call, retain the
+  envelope privately, GET its URL without cookies/Authorization, and compare
+  bytes/SHA-256 with `recording download` of the same leg. Never put the link or
+  recording in evidence uploaded to GitHub. No live deletion/expiration mutation.
+- See [disclosure and retention contract](../../../../docs/RECORDING_LINKS.md).

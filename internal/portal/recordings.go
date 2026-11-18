@@ -20,7 +20,7 @@ const MaxRecordingBytes = 512 << 20
 // CallRecordings resolves recording locators for one verified call. The
 // call-detail header supplies identity, start time and talk_file count; the
 // report constructor's call_records column supplies the media links. Locators
-// are bearer-style URLs: they must stay inside the adapter and never be printed.
+// are bearer-style URLs: disclose only through the explicit recording link command.
 type CallRecordings struct {
 	CommunicationID string
 	DetailFiles     int
@@ -140,4 +140,13 @@ func (c *Client) DownloadRecording(ctx context.Context, r CallRecordings, leg in
 		return "", 0, &Error{Code: 7, Stage: "recording_size"}
 	}
 	return ct, n, nil
+}
+
+// Link returns a validated single-recording capability for explicit disclosure.
+// Callers must verify DownloadRecording succeeds before disclosing it.
+func (r CallRecordings) Link(leg int) string {
+	if leg < 0 || leg >= len(r.links) {
+		return ""
+	}
+	return r.links[leg]
 }

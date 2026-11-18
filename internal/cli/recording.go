@@ -143,7 +143,7 @@ func newRecording(g *globalFlags) *cobra.Command {
 	}
 	dl.Flags().StringP("output", "o", "", "Output file path (required; parent directory must exist)")
 	dl.Flags().String("leg", "all", "Recording leg: all or a 1-based leg number")
-	root.AddCommand(dl)
+	root.AddCommand(dl, newRecordingLink(g))
 	return root
 }
 
