@@ -8,6 +8,8 @@ window and filters in the answer.
 
 ## Count a period with one bounded export
 
+For a busy day or several days, add `--slice 1h` (see below).
+
 ```sh
 "$UIS_BIN" --account "$ACCOUNT" --json --timeout 20s --retries 0 \
   calls search --source private --analysis --all \
@@ -52,10 +54,40 @@ capture. UIS sends no total for an empty set, so an empty export comes back as
 total”, not “0 calls”, and keep that day out of any total reported as complete.
 An empty result does not mean the number is unknown.
 
-Export one cabinet day per `--all` call. A multi-day window can exceed the
-provider or 150-second bound and fail as `provider_error` (`stage:
-cabinet_transport`); split it by day, add only days with `complete: true`, and
-list the other days with their reason.
+A busy window can exceed the 150-second `--all` budget or the 30-second
+per-request timeout and fail as `provider_error` (`stage: cabinet_transport`),
+`cabinet_response_size`, or exit 7 `population_changed` during a long read.
+Measured 2026-11-17 on a busy day: the whole day failed after 150 s, the same
+day as hourly windows completed (2533 calls, about 40 s). Read a busy day, and
+any multi-day window, with `--slice 1h`:
+
+```sh
+"$UIS_BIN" --account "$ACCOUNT" --json --timeout 20s --retries 0 \
+  calls search --source private --analysis --all --slice 1h \
+  --from "$DAY 00:00:00" --till "$DAY 23:59:59" \
+  --limit 1000 > "$CAPTURE_DIR/day.json"
+```
+
+`--slice` splits `--from`..`--till` (cabinet wall time, no zone conversion) into
+consecutive closed windows (`10:00:00`–`10:59:59`; the last ends at `--till`),
+at most 744 per call. Each window gets its own 150-second budget and
+`--max-pages`, and is retried once on a transport, response-size or
+unstable-population failure. A window that fails twice fails the whole command
+with the original error plus `error.details.failed_slice` (`from`, `till`) and
+`windows_completed`; no partial data is ever returned as success, so rerun or
+narrow that window instead of hand-slicing.
+
+Rows are concatenated in window order and deduplicated by `communication_id`.
+`coverage.complete` is true only when every window is complete or empty: an
+empty window has no UIS total (`returned: 0`, `reason:
+provider_count_unavailable`) and counts as covered, not as an unknown. Coverage
+also reports `windows`, `empty_windows`, `retried_windows`,
+`duplicates_removed`, `reported_total` (sum of window totals; `null` if a
+non-empty window had none) and `slices`, one entry per window with `from`,
+`till`, `complete`, `reason`, `returned`, `reported_total`, `pages`,
+`attempts`. With `complete: false`, report the windows that are not complete
+with their reason. An all-empty sliced read is complete with `returned: 0`;
+still say “UIS returned no calls”, since UIS confirms no total for empty sets.
 
 “Did anyone call this phone back?” needs the same coverage: run
 `calls search --source private --phone <number> --analysis --all` over a closed

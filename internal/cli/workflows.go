@@ -481,8 +481,9 @@ func newCalls(g *globalFlags) *cobra.Command {
 		if action == "search" {
 			c.Flags().String("source", "auto", "Read source: auto, private, dataapi")
 			c.Flags().Bool("analysis", false, "Include duration, call type and raw MAV evidence (private only)")
-			c.Flags().Bool("all", false, "Read bounded private pages (150s / 50000 rows; default sort communication_id asc; inspect coverage)")
-			c.Flags().Int("max-pages", 25, "Maximum private pages with --all (1–100)")
+			c.Flags().Bool("all", false, "Read bounded private pages (150s / 50000 rows; default sort communication_id asc; inspect coverage; busy days: add --slice 1h)")
+			c.Flags().Int("max-pages", 25, "Maximum private pages with --all (1–100; per window with --slice)")
+			c.Flags().String("slice", "", "With --all --source private: read --from..--till as consecutive windows of this length (e.g. 1h; whole minutes, ≥1m, ≤744 windows), each with its own 150s budget and one transient retry; use for busy days")
 			c.Flags().String("employee", "", "Cabinet employee name (private)")
 			c.Flags().String("scenario", "", "Cabinet scenario name (private)")
 			c.Flags().String("sort", "call_start_date_time", "Private sort: call_start_date_time or communication_id")
