@@ -142,6 +142,20 @@ func runPrivateSearch(g *globalFlags, cmd *cobra.Command, source, from, till str
 	if all && (!cmd.Flags().Changed("from") || !cmd.Flags().Changed("till") || cmd.Flags().Changed("date-hint")) {
 		return true, exitf(2, "--all requires explicit --from and --till, without --date-hint")
 	}
+	var windows []sliceWindow
+	sliceRaw, _ := cmd.Flags().GetString("slice")
+	if cmd.Flags().Changed("slice") {
+		if !all || source != "private" {
+			return true, exitf(2, "--slice requires --all and --source private")
+		}
+		if offset != 0 {
+			return true, exitf(2, "--slice reads every window from offset 0; drop --offset")
+		}
+		var err error
+		if windows, err = splitSliceWindows(from, till, sliceRaw); err != nil {
+			return true, err
+		}
+	}
 	if source == "dataapi" {
 		return false, nil
 	}
@@ -152,6 +166,9 @@ func runPrivateSearch(g *globalFlags, cmd *cobra.Command, source, from, till str
 	}
 	if g.DryRun {
 		if source == "private" {
+			if windows != nil {
+				return true, emit(g, portal.Object{"source": "private.report_constructor", "query": q, "slice": sliceRaw, "windows": windows, "network": false})
+			}
 			return true, emit(g, portal.Object{"source": "private.report_constructor", "query": q, "network": false})
 		}
 		return false, nil
@@ -162,6 +179,13 @@ func runPrivateSearch(g *globalFlags, cmd *cobra.Command, source, from, till str
 	}
 	if e == nil && err != nil {
 		return true, err
+	}
+	if windows != nil { // --slice implies --source private, so q is valid here
+		out, e := collectPrivateSlices(cmd, g, c, e, q, maxPages, sliceRaw, windows)
+		if e != nil {
+			return true, e
+		}
+		return true, emit(g, out)
 	}
 	if all {
 		var out portal.Object
@@ -191,9 +215,41 @@ func runPrivateSearch(g *globalFlags, cmd *cobra.Command, source, from, till str
 	return true, emit(g, portal.Object{"source": "private.report_constructor", "data": archive.Scrub(page.Data), "metadata": page.Metadata, "limit": limit, "offset": offset, "date_from": from, "date_till": till, "limitations": []string{"Live offset page; no snapshot or historical completeness guarantee", "Cabinet communication_id; private filters use cabinet names and values"}})
 }
 
+// privateCollection is one bounded --all read before it is rendered.
+type privateCollection struct {
+	rows                       []portal.Object
+	total                      *int64
+	initialOffset, pages, next int
+	ended                      bool
+	reason, started, finished  string
+}
+
+func (p privateCollection) complete() bool { return p.ended && p.initialOffset == 0 }
+
 // collectPrivateCalls reads bounded pages without emitting, so an expired
 // session can be refreshed and the whole collection retried once.
 func collectPrivateCalls(cmd *cobra.Command, c *portal.Client, q portal.CallQuery, maxPages int) (portal.Object, error) {
+	p, err := collectPrivateCallPages(cmd, c, q, maxPages)
+	if err != nil {
+		return nil, err
+	}
+	var next interface{} = p.next
+	if p.ended || p.reason == "provider_count_unavailable" {
+		next = nil
+	}
+	return portal.Object{
+		"source": "private.report_constructor", "data": archive.Scrub(p.rows),
+		"date_from": q.From, "date_till": q.Till, "fields": q.Fields,
+		"query_scope": portal.Object{"filter": q.Filter},
+		"coverage":    portal.Object{"complete": p.complete(), "reason": p.reason, "returned": len(p.rows), "reported_total": p.total, "pages": p.pages, "initial_offset": p.initialOffset, "next_offset": next, "snapshot_isolation": false},
+		"observation": portal.Object{"started_at": p.started, "finished_at": p.finished},
+		"limitations": privateAllLimitations,
+	}, nil
+}
+
+var privateAllLimitations = []string{"Cabinet wall time: verify account timezone before calling this a Moscow interval", "Private communication_id is not a verified classic session ID", "Stable count is not snapshot isolation; keep each observation separately", "MAV flag and call type are raw evidence, not inferred manual/key/CRM origins"}
+
+func collectPrivateCallPages(cmd *cobra.Command, c *portal.Client, q portal.CallQuery, maxPages int) (privateCollection, error) {
 	ctx, cancel := context.WithTimeout(cmd.Context(), 150*time.Second)
 	defer cancel()
 	started := time.Now().UTC().Format(time.RFC3339)
@@ -208,17 +264,18 @@ func collectPrivateCalls(cmd *cobra.Command, c *portal.Client, q portal.CallQuer
 		e.Details = map[string]interface{}{"reason": reason, "pages_read": pages, "rows_discarded": len(rows), "hint": "The call set moved during --all; nothing was returned. Rerun --all with --sort communication_id --order asc over a closed window, or report the count as unavailable. Not an auth or capability problem; do not page manually with --offset."}
 		return e
 	}
+	fail := func(e error) (privateCollection, error) { return privateCollection{}, e }
 	for pages < maxPages && len(rows) < 50000 {
 		if remaining := 50000 - len(rows); q.Limit > remaining {
 			q.Limit = remaining
 		}
 		page, err := c.SearchCalls(ctx, q)
 		if err != nil {
-			return nil, err
+			return fail(err)
 		}
 		pages++
 		if total != nil && page.Metadata.Total != nil && *total != *page.Metadata.Total {
-			return nil, unstable("population_changed", "Call population changed between pages; retain previous snapshot and retry")
+			return fail(unstable("population_changed", "Call population changed between pages; retain previous snapshot and retry"))
 		}
 		if page.Metadata.Total != nil {
 			total = page.Metadata.Total
@@ -226,14 +283,14 @@ func collectPrivateCalls(cmd *cobra.Command, c *portal.Client, q portal.CallQuer
 		for _, row := range page.Data {
 			id := string(row["communication_id"].(json.Number)) // SearchCalls validates identity.
 			if seen[id] {
-				return nil, unstable("repeated_communication_id", "Repeated communication ID across pages; population is unstable")
+				return fail(unstable("repeated_communication_id", "Repeated communication ID across pages; population is unstable"))
 			}
 			seen[id] = true
 			rows = append(rows, row)
 		}
 		q.Offset += len(page.Data)
 		if total != nil && int64(q.Offset) > *total {
-			return nil, unstable("count_mismatch", "Provider count disagrees with returned call rows")
+			return fail(unstable("count_mismatch", "Provider count disagrees with returned call rows"))
 		}
 		if total != nil && int64(q.Offset) == *total {
 			ended, reason = true, "provider_count_reached"
@@ -241,7 +298,7 @@ func collectPrivateCalls(cmd *cobra.Command, c *portal.Client, q portal.CallQuer
 		}
 		if len(page.Data) < q.Limit {
 			if total != nil {
-				return nil, unstable("short_page", "Short call page before provider count; population is incomplete")
+				return fail(unstable("short_page", "Short call page before provider count; population is incomplete"))
 			}
 			reason = "provider_count_unavailable"
 			break
@@ -250,16 +307,5 @@ func collectPrivateCalls(cmd *cobra.Command, c *portal.Client, q portal.CallQuer
 	if !ended && len(rows) == 50000 {
 		reason = "record_limit"
 	}
-	var next interface{} = q.Offset
-	if ended || reason == "provider_count_unavailable" {
-		next = nil
-	}
-	return portal.Object{
-		"source": "private.report_constructor", "data": archive.Scrub(rows),
-		"date_from": q.From, "date_till": q.Till, "fields": q.Fields,
-		"query_scope": portal.Object{"filter": q.Filter},
-		"coverage":    portal.Object{"complete": ended && initialOffset == 0, "reason": reason, "returned": len(rows), "reported_total": total, "pages": pages, "initial_offset": initialOffset, "next_offset": next, "snapshot_isolation": false},
-		"observation": portal.Object{"started_at": started, "finished_at": time.Now().UTC().Format(time.RFC3339)},
-		"limitations": []string{"Cabinet wall time: verify account timezone before calling this a Moscow interval", "Private communication_id is not a verified classic session ID", "Stable count is not snapshot isolation; keep each observation separately", "MAV flag and call type are raw evidence, not inferred manual/key/CRM origins"},
-	}, nil
+	return privateCollection{rows: rows, total: total, initialOffset: initialOffset, pages: pages, next: q.Offset, ended: ended, reason: reason, started: started, finished: time.Now().UTC().Format(time.RFC3339)}, nil
 }

@@ -22,7 +22,7 @@ When the task needs what was said (and listening is authorized), use `uis --json
 
 ## Counts, keypresses and robot numbers
 
-Follow [the call analytics recipe](docs/CALL_ANALYTICS.md). Period counts come from one `calls search --source private --analysis --all --from … --till …` export; report `coverage.complete`, or incomplete/drift with its numbers, instead of a total. Keypresses come from `scripts/call_brief.py dtmf` over every eligible call's detail, with scanned/failed/unparsed counts; filter by duration only on request. Calls of a robot/outbound number: `--filter-json '{"field":"employee_phone_number","operator":"=","value":"05XXXXX"}'`.
+Follow [the call analytics recipe](docs/CALL_ANALYTICS.md). Period counts come from one `calls search --source private --analysis --all --from … --till …` export (busy day or multi-day: add `--slice 1h`); report `coverage.complete`, or incomplete/drift with its numbers, instead of a total. Never hand-slice; a failed `--slice` names the window in `error.details.failed_slice`. Keypresses come from `scripts/call_brief.py dtmf` over every eligible call's detail, with scanned/failed/unparsed counts; filter by duration only on request. Calls of a robot/outbound number: `--filter-json '{"field":"employee_phone_number","operator":"=","value":"05XXXXX"}'`.
 
 ## Other operations
 

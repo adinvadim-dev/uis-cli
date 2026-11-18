@@ -308,7 +308,16 @@ page/row caps return an incomplete result and `next_offset`. Without `--sort`,
 over it repeat or skip calls. Drift, duplicate IDs and short pages fail closed
 with exit 7; JSON keeps the generic exit-7 message and names the case in
 `error.details.reason` (`population_changed`, `repeated_communication_id`,
-`count_mismatch`, `short_page`) with `pages_read`, `rows_discarded` and `hint`. Source fallback and implicit refresh remain
+`count_mismatch`, `short_page`) with `pages_read`, `rows_discarded` and `hint`. `--slice <duration>` (with `--all
+--source private` only; whole minutes, ≥1m, ≤744 windows; no `--offset`) splits
+the closed window into consecutive closed sub-windows, reads each with its own
+150-second budget and `--max-pages`, retries a window once on `cabinet_transport`,
+`cabinet_response_size` or an exit-7 unstable reason, and fails the whole command
+with `details.failed_slice` and `windows_completed` if the retry fails. The
+output keeps the `--all` shape; rows are deduplicated by `communication_id`,
+`query_scope.slice` names the slice, and `coverage` adds `windows`,
+`empty_windows`, `retried_windows`, `duplicates_removed` and per-window `slices`
+(an empty window without a provider total counts as covered). Source fallback and implicit refresh remain
 unavailable for these flags. Dates keep literal cabinet wall-time semantics.
 The [employee comparison recipe](OPERATOR_COMPARISON.md) and linked offline
 helper explain two-CLI identity binding and the separate populations.
