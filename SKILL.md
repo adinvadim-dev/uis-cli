@@ -20,6 +20,8 @@ Use the existing bound session first. `account doctor` / `auth status` check pre
 
 When the task needs what was said (and listening is authorized), use `uis --json recording download <communication_id> --output <private-dir>/<id>.mp3`: it verifies the call identity, writes one file per leg (`.legN` suffix when several) and prints only path/bytes/sha256/content-type metadata, never the media URL. Exit 5 means no recording; exit 10 means the file exists (`--force` overwrites). Keep audio in a private temp directory, never commit or share it, and delete it once the question is answered.
 
+For a user-requested forwardable link to one specific call, follow [recording links](docs/RECORDING_LINKS.md). Review the recording content and verify the intended audience under existing disclosure rules before `recording link ID --leg N --audience-approved`. The flag records your completed check; it does not grant permission. Send only the selected link and its expiry warning to the agreed recipient, never raw command output or cabinet credentials. No bulk disclosure.
+
 ## Counts, keypresses and robot numbers
 
 Follow [the call analytics recipe](docs/CALL_ANALYTICS.md). Period counts come from one `calls search --source private --analysis --all --from … --till …` export (busy day or multi-day: add `--slice 1h`); report `coverage.complete`, or incomplete/drift with its numbers, instead of a total. Never hand-slice; a failed `--slice` names the window in `error.details.failed_slice`. Keypresses come from `scripts/call_brief.py dtmf` over every eligible call's detail, with scanned/failed/unparsed counts; filter by duration only on request. Calls of a robot/outbound number: `--filter-json '{"field":"employee_phone_number","operator":"=","value":"05XXXXX"}'`.

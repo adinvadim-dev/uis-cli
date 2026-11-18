@@ -156,3 +156,5 @@ The project [verification skill](.agents/skills/verify-uis-cli/SKILL.md) builds 
 For per-employee source/duration exports and comparison with existing Medivey
 commands, use [Operator comparison](docs/OPERATOR_COMPARISON.md). It includes
 `calls search --analysis --all`, the offline helper and explicit limitations.
+
+For explicitly requested, audience-approved recording links, see [recording links](docs/RECORDING_LINKS.md).

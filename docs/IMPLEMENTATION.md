@@ -72,3 +72,5 @@ with existing Medivey snapshots, checks dates/duplicates/coverage and exposes
 source counts separately from map transfers. It does not establish per-call
 links from masked phones or restore unavailable historical membership.
 See [the command recipe and limits](OPERATOR_COMPARISON.md).
+
+- **Recording link:** `recording link ID --leg N --audience-approved` verifies a complete credential-free download before explicitly disclosing one provider recording capability. Exact expiry is unknown (provider retention); see [the disclosure contract](RECORDING_LINKS.md). Ordinary downloads still suppress locators.
