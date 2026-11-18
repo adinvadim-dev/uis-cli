@@ -40,6 +40,9 @@ func newRecordingLink(g *globalFlags) *cobra.Command {
 			}); err != nil {
 				return err
 			}
+			if rec.Legs() > 1 && !cmd.Flags().Changed("leg") {
+				return exitf(2, "Multiple recording legs: select the reviewed leg explicitly with --leg N")
+			}
 			if leg > rec.Legs() {
 				return notFound("Selected recording is unavailable or past retention", map[string]interface{}{"reason": "no_recording", "legs_available": rec.Legs()})
 			}

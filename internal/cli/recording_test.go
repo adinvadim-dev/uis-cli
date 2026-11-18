@@ -265,6 +265,7 @@ func TestRecordingLinkDisclosure(t *testing.T) {
 		media int
 	}{
 		{"approval_required", nil, 10, 0},
+		{"ambiguous_legs", []string{"--audience-approved"}, 2, 0},
 		{"one_leg", []string{"--audience-approved", "--leg", "2"}, 0, 1},
 		{"missing_leg", []string{"--audience-approved", "--leg", "3"}, 5, 0},
 		{"invalid_leg", []string{"--audience-approved", "--leg", "0"}, 2, 0},
