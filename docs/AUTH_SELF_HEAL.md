@@ -26,7 +26,9 @@ Staff/cabinet reads can succeed while **private call search** fails: `staff empl
 
 ## Repair (once)
 
-Private reads now self-heal once automatically: when the account has a credential_process, the CLI performs this private refresh in-process and retries the read once before failing (never for writes or principal mismatch; `UIS_NO_AUTO_REFRESH=1` disables). If `error.details.auto_refresh.attempted` is true, the automatic refresh already ran; go straight to login below, not another refresh.
+Private reads now self-heal once automatically: when the account has a credential_process, the CLI performs this private refresh in-process and retries the read once before failing (never for writes or principal mismatch; `UIS_NO_AUTO_REFRESH=1` disables). If `error.details.auto_refresh.attempted` is true, the automatic refresh already ran; go straight to login below, not another refresh. After a failed automatic refresh, reads skip it for 10 minutes (`auto_refresh.outcome` `skipped_recent_failure`); an explicit `auth refresh` always runs.
+
+`error.details.stage` `credential_process` means the credential source failed (for example a rate-limited vault), not the UIS login. Do not retry refresh or login: every attempt reads the vault again. Report the blocker and retry after the source recovers.
 
 Use the configured account name and its `expected_login`, never an agent alias.
 

@@ -215,6 +215,40 @@ func TestPrivateReadAutoRefresh(t *testing.T) {
 		}
 	})
 
+	t.Run("failed_refresh_backs_off_then_explicit_refresh_clears", func(t *testing.T) {
+		f := newRefreshFixture(t)
+		f.failLogin = true
+		f.run(privateSearch...)
+		if f.logins != 1 {
+			t.Fatalf("logins=%d, want one refresh", f.logins)
+		}
+		r := f.run(privateSearch...)
+		attempt, _ := r.details["auto_refresh"].(map[string]interface{})
+		if r.code != 3 || r.details["recovery"] != privateAuthRecovery || attempt["outcome"] != "skipped_recent_failure" || f.logins != 1 {
+			t.Fatalf("second read within back-off refreshed again: logins=%d %s", f.logins, r.out)
+		}
+		f.failLogin = false
+		if r := f.run("auth", "refresh", "--surface", "private", "--no-input"); r.code != 0 || f.logins != 2 {
+			t.Fatalf("explicit refresh must ignore back-off: exit=%d logins=%d %s", r.code, f.logins, r.out)
+		}
+		if _, err := os.Stat(refreshFailedMarker("fixture")); !os.IsNotExist(err) {
+			t.Fatal("successful refresh kept the back-off marker")
+		}
+	})
+
+	t.Run("credential_source_failure_names_its_stage", func(t *testing.T) {
+		f := newRefreshFixture(t)
+		a := profile.Account{ExpectedLogin: "fixture@example.invalid"}
+		a.CredentialProcess.Command = []string{"sh", "-c", "exit 1"}
+		if err := profile.Save(profile.Path(), profile.Config{DefaultAccount: "fixture", Accounts: map[string]profile.Account{"fixture": a}}); err != nil {
+			t.Fatal(err)
+		}
+		r := f.run("auth", "refresh", "--surface", "private", "--no-input")
+		if r.code != 3 || r.details["stage"] != "credential_process" || r.details["recovery"] != nil || f.logins != 0 {
+			t.Fatalf("credential failure not attributed: %s", r.out)
+		}
+	})
+
 	t.Run("retry_still_rejected_returns_original_error", func(t *testing.T) {
 		f := newRefreshFixture(t)
 		f.rejectAll = true
