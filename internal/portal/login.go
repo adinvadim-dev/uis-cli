@@ -18,6 +18,22 @@ const appOrigin = "https://app.uiscom.ru"
 const goOrigin = "https://uis-prod-msk-comagic-api.uiscom.ru"
 const userAgent = "Mozilla/5.0"
 
+// loginSteps bounds one redirect chain. The denied-silent-auth path below takes 7 steps.
+const loginSteps = 12
+
+// Since 2026-11-25 sso.uiscom.ru/oauth2/authorize no longer forwards a visitor
+// without an SSO session to the login form: it answers the client callback with
+// error=access_denied and the callback returns 401. The login then opens the
+// form itself, once, so a paid captcha never loops.
+func ssoLoginURL(origin string) string {
+	return "https://sso.uiscom.ru/login?continue=" + url.QueryEscape(origin+"/")
+}
+
+func ssoCallbackError(raw string) bool {
+	u, e := url.Parse(raw)
+	return e == nil && strings.HasSuffix(u.Path, "/sso/callback") && u.Query().Has("error")
+}
+
 // NormalizeLogin matches login labels case-insensitively; passwords are untouched.
 func NormalizeLogin(s string) string { return strings.ToLower(strings.TrimSpace(s)) }
 
@@ -157,10 +173,16 @@ type ssoData struct {
 }
 
 func (l *loginFlow) follow(ctx context.Context, next, origin, login, password string, allowCaptcha bool) (string, error) {
-	for i := 0; i < 8; i++ {
+	openedForm := false
+	for i := 0; i < loginSteps; i++ {
 		current := next
 		b, loc, e := l.request(ctx, "GET", current, nil)
 		if e != nil {
+			if allowCaptcha && !openedForm && ssoCallbackError(current) {
+				openedForm = true
+				next = ssoLoginURL(origin)
+				continue
+			}
 			return "", e
 		}
 		if token := l.token(origin); token != "" {
@@ -175,6 +197,7 @@ func (l *loginFlow) follow(ctx context.Context, next, origin, login, password st
 		if !allowCaptcha || u.Host != "sso.uiscom.ru" || m == nil {
 			break
 		}
+		openedForm = true
 		var d ssoData
 		if json.NewDecoder(strings.NewReader(string(b[m[1]:]))).Decode(&d) != nil || d.Form.CSRF == "" || d.Captcha.Type != "yandex" || d.Captcha.SiteKey == "" {
 			return "", &Error{Code: 7, Stage: "sso_schema"}

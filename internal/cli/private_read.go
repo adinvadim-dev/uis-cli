@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
+	"time"
 
 	"uis-cli/internal/portal"
 	"uis-cli/internal/profile"
@@ -12,6 +14,16 @@ import (
 
 // noAutoRefreshEnv disables the one automatic private-session refresh for reads.
 const noAutoRefreshEnv = "UIS_NO_AUTO_REFRESH"
+
+// refreshBackoff pauses the automatic refresh after one failed. Every attempt
+// reads the credential vault (rate-limited) and may buy a captcha; parallel or
+// repeated reads after a provider-side login change must not burn both.
+// An explicit `auth refresh` always runs and clears the marker on success.
+const refreshBackoff = 10 * time.Minute
+
+func refreshFailedMarker(name string) string {
+	return filepath.Join(profile.State(name), "auto-refresh-failed")
+}
 
 var exitCodeNames = map[int]string{1: "execution_failed", 2: "invalid_usage", 3: "authentication_required", 4: "permission_denied", 5: "not_found", 6: "provider_error", 7: "capability_unavailable", 8: "rate_limited", 9: "outcome_unknown", 10: "confirmation_required"}
 
@@ -39,10 +51,17 @@ func retryPrivateRead(ctx context.Context, g *globalFlags, c *portal.Client, ope
 	if e != nil || !autoRefreshAvailable(account) {
 		return first
 	}
+	marker := refreshFailedMarker(name)
+	if st, err := os.Stat(marker); err == nil && time.Since(st.ModTime()) < refreshBackoff {
+		return withAutoRefresh(first, "skipped_recent_failure", nil)
+	}
 	if g.Verbose {
 		fmt.Fprintln(os.Stderr, "uis: private session rejected; refreshing it once automatically ("+noAutoRefreshEnv+"=1 disables)")
 	}
 	if e = refreshPrivateSession(ctx, g, name, account); e != nil {
+		if os.MkdirAll(filepath.Dir(marker), 0o700) == nil {
+			_ = os.WriteFile(marker, nil, 0o600)
+		}
 		return withAutoRefresh(first, "refresh_failed", e)
 	}
 	c, e = privateClient(g)
@@ -120,12 +139,12 @@ func refreshPrivateSession(ctx context.Context, g *globalFlags, name string, a p
 	}
 	fields, err := profile.Resolve(ctx, a, "portal.login", "portal.password")
 	if err != nil {
-		return exitf(3, "%s", err)
+		return credentialError(err)
 	}
 	err = portal.LoginAndPromote(ctx, profile.State(name), a.ExpectedLogin, a.ExpectedCustomerID, fields["portal.login"], fields["portal.password"], to, func() (string, error) {
 		f, e := profile.Resolve(ctx, a, "captcha.2captcha_api_key")
 		if e != nil {
-			return "", exitf(3, "%s", e)
+			return "", credentialError(e)
 		}
 		return f["captcha.2captcha_api_key"], nil
 	})
@@ -136,5 +155,13 @@ func refreshPrivateSession(ctx context.Context, g *globalFlags, name string, a p
 		}
 		return operationError(err)
 	}
+	_ = os.Remove(refreshFailedMarker(name))
 	return nil
+}
+
+// credentialError keeps exit 3 but names the stage: the external credential
+// source failed (for example a rate-limited vault), not the UIS login itself.
+// The recovery hint is deliberately absent so reads never auto-refresh on it.
+func credentialError(e error) error {
+	return &ExitError{Code: 3, Msg: e.Error(), Details: map[string]interface{}{"stage": "credential_process"}}
 }
