@@ -28,6 +28,8 @@ func TestPrivateLoginRefreshAndReads(t *testing.T) {
 	}
 	failProbe := false
 	badRedirect := false
+	silentDenied := false
+	formContinue := ""
 	creates := 0
 	posts := 0
 	probes := 0
@@ -45,9 +47,15 @@ func TestPrivateLoginRefreshAndReads(t *testing.T) {
 			if badRedirect {
 				target = "https://evil.example/login"
 			}
+			if silentDenied {
+				target = "https://app.uiscom.ru/"
+			}
 			fmt.Fprintf(w, `{"success":true,"redirect_url":%q}`, target)
+		case "app.uiscom.ru/":
+			http.Redirect(w, r, "https://sso.uiscom.ru/oauth2/authorize?prompt=none&client=app", 307)
 		case "sso.uiscom.ru/login":
 			if r.Method == "GET" {
+				formContinue = r.URL.Query().Get("continue")
 				fmt.Fprint(w, `<script>const APP_DATA = {"form_data":{"csrf":"fixture-csrf","not_trusted_device":"false"},"captcha":{"type":"yandex","site_key":"public-site"}};</script>`)
 				return
 			}
@@ -61,11 +69,24 @@ func TestPrivateLoginRefreshAndReads(t *testing.T) {
 			http.SetCookie(w, &http.Cookie{Name: "auth", Value: url.QueryEscape(`{"jwt":"fixture-cabinet"}`), Domain: ".uiscom.ru", Path: "/"})
 			fmt.Fprint(w, "ok")
 		case "app.uiscom.ru/sso/callback":
+			if r.URL.Query().Has("error") {
+				http.Error(w, "", 401)
+				return
+			}
 			http.SetCookie(w, &http.Cookie{Name: "access_token", Value: "fixture-app", Path: "/"})
 			fmt.Fprint(w, "ok")
 		case "uis-prod-msk-comagic-api.uiscom.ru/billing/service":
 			http.Redirect(w, r, "https://sso.uiscom.ru/oauth2/authorize?prompt=none", 302)
 		case "sso.uiscom.ru/oauth2/authorize":
+			if r.URL.Query().Get("client") == "app" {
+				// UIS since 2026-11-25: no SSO session → denied callback instead of the form.
+				if c, e := r.Cookie("sso"); e != nil || c.Value != "fixture-sso" {
+					http.Redirect(w, r, "https://app.uiscom.ru/sso/callback?error=access_denied", 307)
+					return
+				}
+				http.Redirect(w, r, "https://app.uiscom.ru/sso/callback?code=fixture", 302)
+				return
+			}
 			if c, e := r.Cookie("sso"); e != nil || c.Value != "fixture-sso" {
 				t.Error("lost SSO jar")
 			}
@@ -202,6 +223,21 @@ func TestPrivateLoginRefreshAndReads(t *testing.T) {
 	if string(before) != string(after) {
 		t.Fatal("missing key changed session")
 	}
+
+	// UIS denies silent authorisation without an SSO session: login opens the form once.
+	if e := profile.Save(profile.Path(), profile.Config{DefaultAccount: "fixture", Accounts: map[string]profile.Account{"fixture": a}}); e != nil {
+		t.Fatal(e)
+	}
+	silentDenied = true
+	captchaCount = creates
+	if _, e := run("auth", "refresh", "--surface", "private", "--no-input"); e != nil {
+		t.Fatalf("denied silent auth: %v", e)
+	}
+	if creates != captchaCount+1 || formContinue != "https://app.uiscom.ru/" {
+		t.Fatalf("denied silent auth: creates=%d continue=%q", creates-captchaCount, formContinue)
+	}
+	silentDenied = false
+	before, _ = os.ReadFile(sessionPath)
 
 	a.ExpectedLogin = "other@example.invalid"
 	profile.Save(profile.Path(), profile.Config{DefaultAccount: "fixture", Accounts: map[string]profile.Account{"fixture": a}})
